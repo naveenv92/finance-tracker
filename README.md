@@ -57,46 +57,87 @@ go run .
 - **Pure JavaScript**: No frameworks, no build tools
 - **ES6 Modules**: Clean module system
 - **Custom CSS**: Design system with CSS variables
+- **Embedded Assets**: Static files bundled into Go binary via `embed.FS`
 
 ### Backend
-- **Go**: Simple HTTP server using net/http
-- **SQLite**: Embedded database, zero configuration
+- **Go 1.25**: Simple HTTP server using `net/http`
+- **SQLite**: Embedded database at `~/.finance-tracker/data.db`
 - **RESTful API**: JSON endpoints under `/api/*`
+- **Logging**: Daily logs at `~/.finance-tracker/logs/`
+- **Single Binary**: All static assets embedded for easy distribution
 
-**Current Status**: Database operations use backend API, other features still migrating from localStorage.
+### API Endpoints
+
+**Databases:**
+- `GET /api/databases` - List all databases
+- `POST /api/databases` - Create database
+- `GET /api/databases/:id` - Get database
+- `DELETE /api/databases/:id` - Delete database
+
+**Categories:**
+- `GET /api/databases/:id/categories` - List categories
+- `POST /api/databases/:id/categories` - Create category
+- `DELETE /api/databases/:id/categories/:categoryId` - Delete category
+
+**Transactions:**
+- `GET /api/databases/:id/transactions` - List transactions
+- `POST /api/databases/:id/transactions` - Create transaction
+- `PUT /api/databases/:id/transactions/:transactionId` - Update transaction
+- `DELETE /api/databases/:id/transactions/:transactionId` - Delete transaction
+
+**Current Status**:
+- ✅ Databases fully migrated to SQLite backend
+- ✅ Categories fully migrated to SQLite backend
+- ✅ Transactions fully migrated to SQLite backend (viewing/editing)
+- ⏳ CSV import and templates still use localStorage
 
 ## Project Structure
 
 ```
-/finance
-├── index.html              # Landing page
-├── dashboard.html          # Main dashboard
-├── transactions.html       # Transaction table view
-├── review.html            # Transaction review interface
-├── css/
-│   ├── reset.css          # CSS reset
-│   ├── variables.css      # Design system variables
-│   ├── global.css         # Global styles
-│   ├── components.css     # Reusable components
-│   ├── modals.css        # Modal styles
-│   ├── table.css         # Table styles
-│   └── pages/            # Page-specific styles
-├── js/
-│   ├── core/
-│   │   ├── storage.js     # localStorage abstraction
-│   │   ├── database.js    # CRUD operations
-│   │   └── state.js       # App state management
-│   ├── utils/
-│   │   ├── csv-parser.js
-│   │   ├── date-formatter.js
-│   │   ├── validators.js
-│   │   └── helpers.js
-│   ├── components/
-│   │   ├── modal.js       # Modal component
-│   │   ├── notification.js # Toast notifications
-│   │   └── table.js       # Dynamic table
-│   └── pages/            # Page-specific JavaScript
-└── README.md
+finance/
+├── static/                    # Frontend files (embedded in binary)
+│   ├── index.html            # Landing page
+│   ├── dashboard.html        # Main dashboard
+│   ├── transactions.html     # Transaction table view
+│   ├── review.html          # Transaction review interface
+│   ├── css/
+│   │   ├── reset.css        # CSS reset
+│   │   ├── variables.css    # Design system variables
+│   │   ├── global.css       # Global styles
+│   │   ├── components.css   # Reusable components
+│   │   ├── modals.css      # Modal styles
+│   │   ├── table.css       # Table styles
+│   │   └── pages/          # Page-specific styles
+│   └── js/
+│       ├── core/
+│       │   ├── api.js       # Backend API client
+│       │   ├── storage.js   # localStorage abstraction (legacy)
+│       │   ├── database.js  # CRUD operations (legacy)
+│       │   └── state.js     # App state management
+│       ├── utils/
+│       │   ├── csv-parser.js
+│       │   ├── date-formatter.js
+│       │   ├── validators.js
+│       │   └── helpers.js
+│       ├── components/
+│       │   ├── modal.js     # Modal component
+│       │   ├── notification.js # Toast notifications
+│       │   └── table.js     # Dynamic table
+│       └── pages/          # Page-specific JavaScript
+├── main.go                   # HTTP server and routing
+├── database.go              # SQLite operations and schema
+├── go.mod                   # Go dependencies
+├── go.sum                   # Go dependency checksums
+├── .gitignore              # Git ignore rules
+├── README.md               # This file
+├── BACKEND.md              # Backend documentation
+├── CLAUDE.md               # Development context
+└── QUICKSTART.md           # Quick start guide
+
+~/.finance-tracker/         # App data directory (created at runtime)
+├── data.db                 # SQLite database (all user data)
+└── logs/                   # Server logs
+    └── server-YYYY-MM-DD.log  # Daily log files
 ```
 
 ## Data Models
@@ -175,38 +216,61 @@ Requires ES6+ support and localStorage.
 
 ## Storage
 
-All data is stored locally in your browser's localStorage. Data is never sent to any server.
+Data is stored in a SQLite database at `~/.finance-tracker/data.db`. The database is accessed via the Go backend API.
 
-### Storage Limits
-- Most browsers allow 5-10MB of localStorage
-- Approximately 10,000-50,000 transactions depending on complexity
+### Storage Location
+- **Database**: `~/.finance-tracker/data.db` (SQLite)
+- **Logs**: `~/.finance-tracker/logs/server-YYYY-MM-DD.log`
+- **Legacy**: Some features (CSV import, templates) still use browser localStorage
+
+### Storage Capacity
+- SQLite can handle millions of transactions
+- No practical limit for personal finance use
+- Much more scalable than localStorage (5-10MB browser limit)
 
 ### Backup Your Data
-To backup your data:
-1. Open browser DevTools (F12)
-2. Go to Application → Local Storage
-3. Copy all keys starting with `financeTracker:`
-4. Save to a JSON file
 
-To restore:
-1. Open DevTools → Console
-2. Paste the saved data
-3. Refresh the page
+**Recommended (Database backup):**
+```bash
+# Copy the entire data directory
+cp -r ~/.finance-tracker ~/.finance-tracker-backup
 
-## Future Backend Integration
+# Or just the database
+cp ~/.finance-tracker/data.db ~/finance-backup-$(date +%Y%m%d).db
+```
 
-This frontend is designed to easily integrate with a Golang/SQLite backend:
+**View data directly:**
+```bash
+sqlite3 ~/.finance-tracker/data.db "SELECT * FROM transactions;"
+```
 
-1. Create `js/core/api.js` for fetch calls
-2. Update `DatabaseManager` methods to call API endpoints
-3. Add authentication (JWT)
-4. Add loading states
+**Legacy localStorage data:**
+- Templates and CSV import still use localStorage temporarily
+- Will be migrated to backend in future updates
 
-API endpoints will mirror the current data structure:
-- `GET/POST /api/databases`
-- `GET/POST/PUT/DELETE /api/databases/:id/transactions`
-- `GET/POST/PUT/DELETE /api/databases/:id/categories`
-- `GET/POST/PUT/DELETE /api/databases/:id/templates`
+## Future Enhancements
+
+Potential improvements:
+
+**Backend Migration:**
+- Migrate CSV import to backend API
+- Migrate templates to backend API
+- Add bulk transaction import endpoint
+
+**Features:**
+- Export transactions to CSV
+- Reports and charts (spending by category, over time)
+- Budget tracking
+- Recurring transaction templates
+- Multi-currency support
+- Transaction attachments (receipt images)
+
+**Security & Production:**
+- Add authentication (JWT tokens)
+- Add user accounts and authorization
+- HTTPS/TLS support
+- Rate limiting
+- CORS configuration for separate frontend/backend hosting
 
 ## License
 
