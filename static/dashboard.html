@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - Finance Tracker</title>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="css/reset.css">
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/global.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/modals.css">
+  <link rel="stylesheet" href="css/pages/dashboard.css">
+</head>
+<body>
+  <div class="layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">Finance Tracker</div>
+      <nav class="sidebar-nav">
+        <a href="dashboard.html" class="active">Dashboard</a>
+        <a href="transactions.html">View Transactions</a>
+        <a href="review.html">Review Transactions</a>
+        <a href="index.html" id="change-db-link">Change Database</a>
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <div class="dashboard-header">
+        <div class="dashboard-title-section">
+          <h1>Dashboard</h1>
+          <p class="dashboard-db-name" id="db-name"></p>
+        </div>
+        <button class="btn btn-secondary" id="change-db-btn">Change Database</button>
+      </div>
+
+      <!-- Stats Grid -->
+      <div class="stats-grid" id="stats-grid">
+        <!-- Stats cards will be inserted here -->
+      </div>
+
+      <!-- Actions Section -->
+      <div class="actions-section">
+        <h2>Quick Actions</h2>
+        <div class="actions-grid" id="actions-grid">
+          <!-- Action cards will be inserted here -->
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- JavaScript -->
+  <script type="module" src="js/pages/dashboard.js"></script>
+</body>
+</html>

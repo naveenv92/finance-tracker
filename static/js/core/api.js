@@ -1,0 +1,167 @@
+/**
+ * API Layer - Handles all HTTP requests to the backend
+ */
+
+const API_BASE_URL = 'http://localhost:8080/api';
+
+/**
+ * Generic fetch wrapper with error handling
+ */
+async function fetchAPI(endpoint, options = {}) {
+  try {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+      ...options,
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(error || `HTTP error! status: ${response.status}`);
+    }
+
+    // Handle 204 No Content
+    if (response.status === 204) {
+      return null;
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('API Error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Database API methods
+ */
+export const DatabaseAPI = {
+  /**
+   * Get all databases
+   */
+  async getAll() {
+    return fetchAPI('/databases');
+  },
+
+  /**
+   * Get database by ID
+   */
+  async getById(id) {
+    return fetchAPI(`/databases/${id}`);
+  },
+
+  /**
+   * Create a new database
+   */
+  async create(name) {
+    return fetchAPI('/databases', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
+  },
+
+  /**
+   * Delete a database
+   */
+  async delete(id) {
+    return fetchAPI(`/databases/${id}`, {
+      method: 'DELETE',
+    });
+  },
+};
+
+/**
+ * Transaction API methods (placeholder for future implementation)
+ */
+export const TransactionAPI = {
+  async getAll(databaseId) {
+    return fetchAPI(`/databases/${databaseId}/transactions`);
+  },
+
+  async create(databaseId, transaction) {
+    return fetchAPI(`/databases/${databaseId}/transactions`, {
+      method: 'POST',
+      body: JSON.stringify(transaction),
+    });
+  },
+
+  async update(databaseId, transaction) {
+    return fetchAPI(`/databases/${databaseId}/transactions/${transaction.id}`, {
+      method: 'PUT',
+      body: JSON.stringify(transaction),
+    });
+  },
+
+  async delete(databaseId, transactionId) {
+    return fetchAPI(`/databases/${databaseId}/transactions/${transactionId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async importMany(databaseId, transactions) {
+    return fetchAPI(`/databases/${databaseId}/transactions/import`, {
+      method: 'POST',
+      body: JSON.stringify({ transactions }),
+    });
+  },
+};
+
+/**
+ * Category API methods
+ */
+export const CategoryAPI = {
+  async getAll(databaseId) {
+    return fetchAPI(`/databases/${databaseId}/categories`);
+  },
+
+  async create(databaseId, category) {
+    return fetchAPI(`/databases/${databaseId}/categories`, {
+      method: 'POST',
+      body: JSON.stringify(category),
+    });
+  },
+
+  async update(databaseId, category) {
+    return fetchAPI(`/databases/${databaseId}/categories/${category.id}`, {
+      method: 'PUT',
+      body: JSON.stringify(category),
+    });
+  },
+
+  async delete(databaseId, categoryId) {
+    return fetchAPI(`/databases/${databaseId}/categories/${categoryId}`, {
+      method: 'DELETE',
+    });
+  },
+};
+
+/**
+ * Template API methods (placeholder for future implementation)
+ */
+export const TemplateAPI = {
+  async getAll(databaseId) {
+    return fetchAPI(`/databases/${databaseId}/templates`);
+  },
+
+  async create(databaseId, template) {
+    return fetchAPI(`/databases/${databaseId}/templates`, {
+      method: 'POST',
+      body: JSON.stringify(template),
+    });
+  },
+
+  async update(databaseId, template) {
+    return fetchAPI(`/databases/${databaseId}/templates/${template.id}`, {
+      method: 'PUT',
+      body: JSON.stringify(template),
+    });
+  },
+
+  async delete(databaseId, templateId) {
+    return fetchAPI(`/databases/${databaseId}/templates/${templateId}`, {
+      method: 'DELETE',
+    });
+  },
+};

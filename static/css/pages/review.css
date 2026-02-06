@@ -1,0 +1,118 @@
+/* Review Page */
+.review-container {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.review-card {
+  background-color: white;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: var(--spacing-2xl);
+}
+
+.review-header {
+  margin-bottom: var(--spacing-xl);
+  text-align: center;
+}
+
+.review-form {
+  margin-bottom: var(--spacing-xl);
+}
+
+.transaction-amount-display {
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-bold);
+  text-align: center;
+  margin-bottom: var(--spacing-lg);
+  font-family: var(--font-family-mono);
+}
+
+.transaction-amount-display.negative {
+  color: var(--color-expense);
+}
+
+.transaction-amount-display.positive {
+  color: var(--color-income);
+}
+
+.original-merchant {
+  font-size: var(--font-size-sm);
+  color: var(--gray-500);
+  margin-bottom: var(--spacing-xs);
+}
+
+.splits-section {
+  margin-top: var(--spacing-xl);
+  padding-top: var(--spacing-xl);
+  border-top: 1px solid var(--gray-200);
+}
+
+.splits-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-md);
+}
+
+.splits-header h4 {
+  margin: 0;
+}
+
+.splits-list {
+  margin-bottom: var(--spacing-md);
+}
+
+.split-total {
+  text-align: right;
+  font-size: var(--font-size-sm);
+  color: var(--gray-600);
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--gray-200);
+}
+
+.split-total-value {
+  font-weight: var(--font-weight-bold);
+  font-family: var(--font-family-mono);
+}
+
+.split-total-warning {
+  color: var(--color-warning);
+}
+
+.review-actions {
+  display: flex;
+  gap: var(--spacing-md);
+  justify-content: space-between;
+  margin-top: var(--spacing-xl);
+}
+
+.review-actions-left,
+.review-actions-right {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.review-complete {
+  text-align: center;
+  padding: var(--spacing-3xl);
+}
+
+.review-complete-icon {
+  font-size: var(--font-size-4xl);
+  color: var(--color-success);
+  margin-bottom: var(--spacing-lg);
+}
+
+.review-complete-title {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  margin-bottom: var(--spacing-md);
+}
+
+.review-complete-text {
+  font-size: var(--font-size-base);
+  color: var(--gray-600);
+  margin-bottom: var(--spacing-xl);
+}

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Finance Tracker - Home</title>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="css/reset.css">
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/global.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/modals.css">
+  <link rel="stylesheet" href="css/pages/landing.css">
+</head>
+<body>
+  <div class="landing-container">
+    <div class="landing-content">
+      <header class="landing-header">
+        <h1 class="landing-title">Finance Tracker</h1>
+        <p class="landing-subtitle">Manage your personal finances with ease</p>
+      </header>
+
+      <div class="database-grid">
+        <!-- Create New Database -->
+        <div class="database-section">
+          <h2 class="database-section-title">
+            <span class="database-section-icon">➕</span>
+            Create New Database
+          </h2>
+          <div class="create-database-area">
+            <div class="create-database-icon">📊</div>
+            <p class="create-database-text">Start tracking your finances by creating a new database</p>
+            <button class="btn btn-primary btn-large" id="create-db-btn">Create Database</button>
+          </div>
+        </div>
+
+        <!-- Load Existing Database -->
+        <div class="database-section">
+          <h2 class="database-section-title">
+            <span class="database-section-icon">📂</span>
+            Load Existing Database
+          </h2>
+          <div id="database-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript -->
+  <script type="module" src="js/pages/landing.js"></script>
+</body>
+</html>

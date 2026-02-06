@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Transactions - Finance Tracker</title>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="css/reset.css">
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/global.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/modals.css">
+  <link rel="stylesheet" href="css/table.css">
+  <link rel="stylesheet" href="css/pages/transactions.css">
+</head>
+<body>
+  <div class="layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">Finance Tracker</div>
+      <nav class="sidebar-nav">
+        <a href="dashboard.html">Dashboard</a>
+        <a href="transactions.html" class="active">View Transactions</a>
+        <a href="review.html">Review Transactions</a>
+        <a href="index.html">Change Database</a>
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <div class="page-header">
+        <h1 class="page-title">Transactions</h1>
+        <p class="page-description">View and manage all your transactions</p>
+      </div>
+
+      <!-- Table Container -->
+      <div class="table-container">
+        <div class="table-header">
+          <h3 class="table-title">All Transactions</h3>
+          <div class="table-actions">
+            <div class="search-bar">
+              <span class="search-icon">🔍</span>
+              <input type="text" placeholder="Search by merchant..." id="search-input">
+            </div>
+          </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="table-filters" id="filters">
+          <!-- Filters will be inserted here -->
+        </div>
+
+        <!-- Table -->
+        <div id="transactions-table"></div>
+
+        <!-- Pagination -->
+        <div class="pagination" id="pagination">
+          <div class="pagination-info" id="pagination-info"></div>
+          <div class="pagination-controls" id="pagination-controls"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- JavaScript -->
+  <script type="module" src="js/pages/transactions.js"></script>
+</body>
+</html>
