@@ -3,8 +3,7 @@
  */
 
 import { AppState } from '../core/state.js';
-import { DatabaseManager } from '../core/database.js';
-import { CategoryAPI } from '../core/api.js';
+import { TransactionAPI, CategoryAPI, TemplateAPI } from '../core/api.js';
 import { Modal } from '../components/modal.js';
 import { Notification } from '../components/notification.js';
 import { CSVParser } from '../utils/csv-parser.js';
@@ -43,7 +42,7 @@ async function init() {
 
   document.getElementById('db-name').textContent = database.name;
 
-  renderStats();
+  await renderStats();
   renderActions();
   setupEventListeners();
 }
@@ -61,11 +60,23 @@ function setupEventListeners() {
 /**
  * Render statistics cards
  */
-function renderStats() {
+async function renderStats() {
   const dbId = AppState.getActiveDatabaseId();
-  const transactions = DatabaseManager.getTransactions(dbId);
-  const categories = DatabaseManager.getCategories(dbId);
-  const templates = DatabaseManager.getTemplates(dbId);
+
+  let transactions = [];
+  let categories = [];
+  let templates = [];
+
+  try {
+    [transactions, categories, templates] = await Promise.all([
+      TransactionAPI.getAll(dbId),
+      CategoryAPI.getAll(dbId),
+      TemplateAPI.getAll(dbId),
+    ]);
+  } catch (error) {
+    console.error('Error loading stats:', error);
+  }
+
   const unreviewed = transactions.filter(t => !t.reviewed).length;
 
   const statsHTML = `
@@ -130,9 +141,16 @@ function renderActions() {
 /**
  * Show CSV import modal
  */
-window.showImportCSVModal = function() {
+window.showImportCSVModal = async function() {
   const dbId = AppState.getActiveDatabaseId();
-  const templates = DatabaseManager.getTemplates(dbId);
+
+  let templates = [];
+  try {
+    templates = await TemplateAPI.getAll(dbId);
+  } catch (error) {
+    Notification.error('Failed to load templates');
+    return;
+  }
 
   if (templates.length === 0) {
     Notification.warning('Please create a CSV template first');
@@ -161,7 +179,7 @@ window.showImportCSVModal = function() {
   const modal = Modal.create('import-csv-modal', 'Import CSV File', contentHTML);
   modal.setSubmitText('Import');
 
-  modal.setSubmitHandler(() => {
+  modal.setSubmitHandler(async () => {
     const fileInput = document.getElementById('csv-file');
     const templateSelect = document.getElementById('template-select');
     const file = fileInput.files[0];
@@ -177,51 +195,50 @@ window.showImportCSVModal = function() {
       return false;
     }
 
-    const template = DatabaseManager.getTemplate(dbId, templateId);
+    const template = templates.find(t => t.id === templateId);
     if (!template) {
       Notification.error('Template not found');
       return false;
     }
 
-    // Read and parse CSV
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const csvText = e.target.result;
-      const { headers, rows } = CSVParser.parse(csvText);
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const csvText = e.target.result;
+        const { headers, rows } = CSVParser.parse(csvText);
 
-      // Validate columns
-      const validation = CSVParser.validateColumns(headers, template);
-      if (!validation.isValid) {
-        Notification.error(`Missing columns: ${validation.missing.join(', ')}`);
-        return;
-      }
+        // Validate columns
+        const validation = CSVParser.validateColumns(headers, template);
+        if (!validation.isValid) {
+          Notification.error(`Missing columns: ${validation.missing.join(', ')}`);
+          resolve(false);
+          return;
+        }
 
-      // Convert rows to transactions
-      const transactions = rows.map(row => {
-        const dateString = CSVParser.getValue(row, template.dateColumn);
-        const merchant = CSVParser.getValue(row, template.merchantColumn);
-        const amountString = CSVParser.getValue(row, template.amountColumn);
-
-        return {
-          date: DateFormatter.standardize(dateString, template.dateFormat),
-          merchant: cleanMerchantName(merchant),
-          originalMerchant: merchant,
-          amount: parseFloat(amountString.replace(/[,$]/g, '')),
+        // Convert rows to transactions
+        const transactions = rows.map(row => ({
+          date: DateFormatter.standardize(CSVParser.getValue(row, template.dateColumn), template.dateFormat),
+          merchant: cleanMerchantName(CSVParser.getValue(row, template.merchantColumn)),
+          originalMerchant: CSVParser.getValue(row, template.merchantColumn),
+          amount: parseFloat(CSVParser.getValue(row, template.amountColumn).replace(/[,$]/g, '')),
           categoryId: null,
-          splits: [],
+          splits: '[]',
           reviewed: false,
           notes: ''
-        };
-      });
+        }));
 
-      // Import transactions
-      DatabaseManager.importTransactions(dbId, transactions);
-
-      Notification.success(`Imported ${transactions.length} transactions`);
-      renderStats();
-    };
-
-    reader.readAsText(file);
+        try {
+          await TransactionAPI.importMany(dbId, transactions);
+          Notification.success(`Imported ${transactions.length} transactions`);
+          await renderStats();
+          resolve(true);
+        } catch (error) {
+          Notification.error('Failed to import transactions: ' + error.message);
+          resolve(false);
+        }
+      };
+      reader.readAsText(file);
+    });
   });
 
   modal.show();
@@ -230,11 +247,56 @@ window.showImportCSVModal = function() {
 /**
  * Show templates management modal
  */
-window.showTemplatesModal = function() {
+window.showTemplatesModal = async function() {
   const dbId = AppState.getActiveDatabaseId();
-  const templates = DatabaseManager.getTemplates(dbId);
 
-  const contentHTML = `
+  let templates = [];
+  try {
+    templates = await TemplateAPI.getAll(dbId);
+  } catch (error) {
+    Notification.error('Failed to load templates');
+    return;
+  }
+
+  const contentHTML = generateTemplatesModalContent(templates);
+  const modal = Modal.create('templates-modal', 'Manage CSV Templates', contentHTML);
+  modal.setSubmitText('Create Template');
+
+  modal.setSubmitHandler(async () => {
+    const form = document.getElementById('template-form');
+    const formData = new FormData(form);
+    const data = Object.fromEntries(formData);
+
+    // Validate
+    if (!isValidTemplateName(data.name) || !isValidColumnName(data.dateColumn) ||
+        !isValidColumnName(data.merchantColumn) || !isValidColumnName(data.amountColumn) ||
+        !isValidDateFormat(data.dateFormat)) {
+      Notification.error('Please fill in all fields correctly');
+      return false;
+    }
+
+    try {
+      await TemplateAPI.create(dbId, data);
+      Notification.success('Template created successfully');
+
+      // Refresh list and update modal content
+      const updatedTemplates = await TemplateAPI.getAll(dbId);
+      modal.updateContent(generateTemplatesModalContent(updatedTemplates));
+      return false; // Keep modal open
+    } catch (error) {
+      Notification.error('Failed to create template: ' + error.message);
+      return false;
+    }
+  });
+
+  modal.show();
+};
+
+/**
+ * Generate templates modal content HTML
+ */
+function generateTemplatesModalContent(templates) {
+  return `
     <div style="margin-bottom: var(--spacing-lg);">
       <h4 style="margin-bottom: var(--spacing-md);">Existing Templates</h4>
       ${templates.length === 0 ? '<p class="text-muted">No templates created yet</p>' : `
@@ -283,51 +345,31 @@ window.showTemplatesModal = function() {
       </div>
     </form>
   `;
-
-  const modal = Modal.create('templates-modal', 'Manage CSV Templates', contentHTML);
-  modal.setSubmitText('Create Template');
-
-  modal.setSubmitHandler(() => {
-    const form = document.getElementById('template-form');
-    const formData = new FormData(form);
-    const data = Object.fromEntries(formData);
-
-    // Validate
-    if (!isValidTemplateName(data.name) || !isValidColumnName(data.dateColumn) ||
-        !isValidColumnName(data.merchantColumn) || !isValidColumnName(data.amountColumn) ||
-        !isValidDateFormat(data.dateFormat)) {
-      Notification.error('Please fill in all fields correctly');
-      return false;
-    }
-
-    // Create template
-    DatabaseManager.addTemplate(dbId, data);
-    Notification.success('Template created successfully');
-
-    // Reopen modal to show updated list
-    modal.close();
-    setTimeout(() => showTemplatesModal(), 300);
-  });
-
-  modal.show();
-};
+}
 
 /**
  * Delete template
  */
-window.deleteTemplate = function(templateId) {
+window.deleteTemplate = async function(templateId) {
   const dbId = AppState.getActiveDatabaseId();
-  const template = DatabaseManager.getTemplate(dbId, templateId);
 
-  if (!confirm(`Delete template "${template.name}"?`)) return;
+  if (!confirm('Delete this template?')) return;
 
-  DatabaseManager.deleteTemplate(dbId, templateId);
-  Notification.success('Template deleted');
+  try {
+    await TemplateAPI.delete(dbId, templateId);
+    Notification.success('Template deleted');
 
-  // Reopen modal
-  const modal = document.querySelector('.modal-overlay');
-  if (modal) {
-    setTimeout(() => showTemplatesModal(), 100);
+    // Refresh list and update modal content
+    const templates = await TemplateAPI.getAll(dbId);
+    const modal = document.querySelector('.modal');
+    if (modal) {
+      const modalBody = modal.querySelector('.modal-body');
+      if (modalBody) {
+        modalBody.innerHTML = generateTemplatesModalContent(templates);
+      }
+    }
+  } catch (error) {
+    Notification.error('Failed to delete template: ' + error.message);
   }
 };
 
@@ -409,8 +451,6 @@ window.showCategoriesModal = async function() {
     modal.setSubmitText('Create Category');
 
     modal.setSubmitHandler(async () => {
-      console.log('Submit handler called');
-
       // Sync color inputs
       const colorInput = document.getElementById('category-color');
       const colorHexInput = document.getElementById('category-color-hex');
@@ -419,26 +459,18 @@ window.showCategoriesModal = async function() {
       }
 
       const form = document.getElementById('category-form');
-      if (!form) {
-        console.error('Form not found');
-        return false;
-      }
+      if (!form) return false;
 
       const formData = new FormData(form);
       const data = Object.fromEntries(formData);
-      console.log('Form data:', data);
 
       // Validate
       if (!isValidCategoryName(data.name) || !isValidHexColor(data.color) || !isValidEmoji(data.emoji)) {
         Notification.error('Please fill in all fields correctly');
-        console.log('Validation failed');
         return false;
       }
 
-      console.log('Validation passed, creating category');
-
       try {
-        // Create category via API
         await CategoryAPI.create(dbId, {
           name: data.name,
           color: data.color.toUpperCase(),
@@ -449,26 +481,22 @@ window.showCategoriesModal = async function() {
 
         // Refresh categories and update modal content
         const updatedCategories = await CategoryAPI.getAll(dbId);
-        const newContent = generateCategoriesModalContent(updatedCategories);
-        modal.updateContent(newContent);
+        modal.updateContent(generateCategoriesModalContent(updatedCategories));
 
-        // Re-setup color sync and reset form
         setupColorSync();
 
-        // Reset the form to allow creating another category
+        // Reset the form
         const newForm = document.getElementById('category-form');
         if (newForm) {
           newForm.reset();
-          // Reset color inputs to default
-          const colorInput = document.getElementById('category-color');
-          const colorHexInput = document.getElementById('category-color-hex');
-          if (colorInput) colorInput.value = '#FF6B6B';
-          if (colorHexInput) colorHexInput.value = '#FF6B6B';
+          const ci = document.getElementById('category-color');
+          const chi = document.getElementById('category-color-hex');
+          if (ci) ci.value = '#FF6B6B';
+          if (chi) chi.value = '#FF6B6B';
         }
 
         return false; // Don't close modal
       } catch (error) {
-        console.error('Error creating category:', error);
         Notification.error('Failed to create category: ' + error.message);
         return false;
       }
@@ -477,7 +505,6 @@ window.showCategoriesModal = async function() {
     setupColorSync();
     modal.show();
   } catch (error) {
-    console.error('Error loading categories:', error);
     Notification.error('Failed to load categories: ' + error.message);
   }
 };
@@ -488,30 +515,23 @@ window.showCategoriesModal = async function() {
 window.deleteCategory = async function(categoryId) {
   const dbId = AppState.getActiveDatabaseId();
 
+  if (!confirm('Delete this category?')) return;
+
   try {
-    // Note: For now, we're not checking usage count or updating transactions
-    // That will be handled when transactions are migrated to backend
-    const confirmed = confirm(`Delete this category?`);
-
-    if (!confirmed) return;
-
     await CategoryAPI.delete(dbId, categoryId);
     Notification.success('Category deleted');
 
     // Refresh categories and update modal content
     const categories = await CategoryAPI.getAll(dbId);
-    const newContent = generateCategoriesModalContent(categories);
-
     const modal = document.querySelector('.modal');
     if (modal) {
       const modalBody = modal.querySelector('.modal-body');
       if (modalBody) {
-        modalBody.innerHTML = newContent;
+        modalBody.innerHTML = generateCategoriesModalContent(categories);
         setupColorSync();
       }
     }
   } catch (error) {
-    console.error('Error deleting category:', error);
     Notification.error('Failed to delete category: ' + error.message);
   }
 };

@@ -60,15 +60,13 @@ All planned features have been implemented:
 7. **Phase 7: Backend Integration** ✅
    - Go server with net/http
    - SQLite database with proper schema
-   - RESTful API for database and category operations
+   - RESTful API for all entities (databases, categories, transactions, templates)
    - Frontend API client (static/js/core/api.js)
-   - Landing page fully migrated to backend API
-   - Dashboard page loads database from backend
-   - Categories fully migrated to backend (create/list/delete)
-   - Review page loads categories from backend
+   - All pages fully migrated to backend API
    - Database create/load/delete working with SQLite
    - Async state management for API calls
    - Modal component supports async submit handlers
+   - Bulk CSV import via `POST /api/databases/:id/transactions/import`
    - Fixed: Dashboard redirect issue (was looking in localStorage instead of SQLite)
    - Fixed: Modal stacking issue (now updates content in place)
    - Fixed: Empty array serialization (nil slices now return [])
@@ -130,6 +128,16 @@ Added ability to split transactions using either dollar amounts or percentages (
 ### Feature: Categories Migrated to SQLite Backend (2026-02-05) ✅
 
 Backend: Added `Category` struct, `CreateCategory()`/`GetCategories()`/`DeleteCategory()` functions, and nested routing `/api/databases/:id/categories`. Frontend: Updated `dashboard.js` and `review.js` to use `CategoryAPI` instead of `DatabaseManager` for all category operations.
+
+### Full Backend Migration: Review Page, Dashboard, Templates (2026-03-06) ✅
+
+**Changes**:
+- **`database.go`**: Added `Template` struct and `CreateTemplate()`/`GetTemplates()`/`GetTemplate()`/`DeleteTemplate()` functions
+- **`main.go`**: Added `GET/POST /api/databases/:id/templates`, `DELETE /api/databases/:id/templates/:id`, and `POST /api/databases/:id/transactions/import` (bulk import) routes
+- **`dashboard.js`**: Fully migrated to backend — `renderStats()` is now async and fetches from `TransactionAPI`/`CategoryAPI`/`TemplateAPI` in parallel; template management uses `TemplateAPI`; CSV import uses `TransactionAPI.importMany()`
+- **`review.js`**: Fully migrated to backend — `loadUnreviewedTransactions()` now uses `TransactionAPI.getAll()` filtered by `!reviewed`; `saveTransaction()` uses `TransactionAPI.update()` with splits JSON-stringified; removed all `DatabaseManager` usage
+
+**Result**: All localStorage usage for application data is eliminated. The only remaining localStorage key is `financeTracker:activeDb` (the active database ID, used as a lightweight session pointer — the full database object is always fetched from the backend).
 
 ## Key Architecture Decisions
 
@@ -226,9 +234,9 @@ finance/
 
 **Pages (4 files)**:
 - `static/js/pages/landing.js` - Database CRUD (fully migrated to backend API)
-- `static/js/pages/dashboard.js` - Stats, import, templates, categories (database info from backend, rest from localStorage)
-- `static/js/pages/transactions.js` - Transaction table with filters (uses localStorage)
-- `static/js/pages/review.js` - Review workflow (categories from backend, transactions from localStorage)
+- `static/js/pages/dashboard.js` - Stats, import, templates, categories (fully migrated to backend API)
+- `static/js/pages/transactions.js` - Transaction table with filters (fully migrated to backend API)
+- `static/js/pages/review.js` - Review workflow (fully migrated to backend API)
 
 **Documentation (2 files)**:
 - `README.md` - User-facing documentation
@@ -276,12 +284,14 @@ All tables use UUID primary keys and cascade deletes for referential integrity.
 **Transactions:**
 - ✅ `GET /api/databases/:id/transactions` - List all transactions for a database
 - ✅ `POST /api/databases/:id/transactions` - Create new transaction
+- ✅ `POST /api/databases/:id/transactions/import` - Bulk import transactions from CSV
 - ✅ `PUT /api/databases/:id/transactions/:transactionId` - Update transaction
 - ✅ `DELETE /api/databases/:id/transactions/:transactionId` - Delete transaction
 
-### API Endpoints TODO
-- ⏳ Template endpoints (GET, POST, PUT, DELETE)
-- ⏳ Bulk CSV import endpoint
+**Templates:**
+- ✅ `GET /api/databases/:id/templates` - List all templates for a database
+- ✅ `POST /api/databases/:id/templates` - Create new template
+- ✅ `DELETE /api/databases/:id/templates/:templateId` - Delete template
 
 ### Running the Backend
 ```bash
@@ -316,12 +326,12 @@ go build -o finance-tracker
 - **Dashboard page** (`static/js/pages/dashboard.js`):
   - ✅ Database loading: `GET /api/databases/:id` (via AppState)
   - ✅ Displays database name from backend
-  - ✅ Category creation: `POST /api/databases/:id/categories`
-  - ✅ Category listing: `GET /api/databases/:id/categories`
-  - ✅ Category deletion: `DELETE /api/databases/:id/categories/:categoryId`
-  - ✅ Modal stays open after category creation (form resets)
+  - ✅ Stats load from backend (`TransactionAPI`, `CategoryAPI`, `TemplateAPI` in parallel)
+  - ✅ Category creation/listing/deletion via `CategoryAPI`
+  - ✅ Template creation/listing/deletion via `TemplateAPI`
+  - ✅ CSV import uses `TransactionAPI.importMany()` (bulk import)
+  - ✅ Modal stays open after category/template creation (form resets)
   - ✅ Modal content updates in place (no stacking)
-  - ⏳ Templates still use localStorage
 
 - **Transactions page** (`static/js/pages/transactions.js`):
   - ✅ Transaction loading: `GET /api/databases/:id/transactions`
@@ -331,11 +341,13 @@ go build -o finance-tracker
   - ✅ Splits stored as JSON string in database
 
 - **Review page** (`static/js/pages/review.js`):
+  - ✅ Transaction loading: `GET /api/databases/:id/transactions` (filtered by `!reviewed`)
+  - ✅ Transaction saving: `PUT /api/databases/:id/transactions/:transactionId`
   - ✅ Category loading: `GET /api/databases/:id/categories`
   - ✅ Categories populate dropdown for transaction categorization
   - ✅ Split by dollar amount or percentage with auto-conversion
   - ✅ Amount type selector for each split (Dollar Amount / Percentage)
-  - ⏳ Transactions still use localStorage for review workflow
+  - ✅ Splits serialized as JSON string before sending to backend
 
 - **State Management** (`static/js/core/state.js`):
   - ✅ `setActiveDatabase()` - async, verifies via backend API
@@ -348,10 +360,8 @@ go build -o finance-tracker
   - ✅ Respects `false` return value to keep modal open
   - ✅ Stores button text before rendering
 
-**Still Using localStorage** (pending migration):
-- Review page - transaction operations (loading, saving)
-- Dashboard - CSV import and templates (categories use backend)
-- CSV import workflow
+**localStorage Usage** (minimal — only session state):
+- Active DB ID: `financeTracker:activeDb` — lightweight pointer; full database object always fetched from backend
 
 ## Data Models
 
@@ -451,7 +461,7 @@ go build -o finance-tracker
 
 ### Review Flow
 1. User navigates to Review page
-2. System loads categories from backend API
+2. System loads categories and unreviewed transactions from backend API
 3. System shows first unreviewed transaction
 4. User edits merchant name, assigns category from dropdown
 5. User optionally adds splits:
@@ -472,15 +482,19 @@ go build -o finance-tracker
 
 ## Important Implementation Notes
 
-### Backend vs localStorage- **Database operations**: ✅ Fully migrated to backend (SQLite via API)
+### Backend vs localStorage
+
+All application data is now in SQLite. localStorage holds only the active database ID session pointer.
+
+- **Database operations**: ✅ Fully migrated to backend (SQLite via API)
 - **Category operations**: ✅ Fully migrated to backend (SQLite via API)
-- **State management**: Hybrid approach
-  - Active database ID: Stored in localStorage for quick access
-  - Active database object: Fetched from backend on demand via async API call
+- **Transaction operations**: ✅ Fully migrated to backend (SQLite via API)
+- **Template operations**: ✅ Fully migrated to backend (SQLite via API)
+- **State management**: Hybrid (by design)
+  - Active database ID: Stored in localStorage as a session pointer
+  - Active database object: Always fetched from backend on demand
   - `AppState.setActiveDatabase()` - async, verifies database exists in backend
   - `AppState.getActiveDatabase()` - async, fetches from backend
-- **Transactions/Templates**: ⏳ Still use localStorage (pending migration)
-- **Migration strategy**: Gradually move each data type to backend API
 
 **Key Changes**:
 - State management functions are now async to support backend API calls. All callers must use `await`.
@@ -515,12 +529,12 @@ if (!AppState.requireActiveDatabase()) {
 - `AppState.setActiveDatabaseSync(dbId)` - Sets active DB without backend verification
 - `AppState.getActiveDatabaseSync()` - Gets DB from localStorage only
 
-### localStorage Keys (Partially Deprecated)
+### localStorage Keys
 - ~~Databases list: `financeTracker:databases`~~ - Now in SQLite ✅
 - ~~Categories: `financeTracker:{dbId}:categories`~~ - Now in SQLite ✅
-- Active DB ID: `financeTracker:activeDb` - Still in localStorage (for quick access, but database object fetched from backend)
-- Transactions: `financeTracker:{dbId}:transactions` - Still in localStorage ⏳
-- Templates: `financeTracker:{dbId}:templates` - Still in localStorage ⏳
+- ~~Transactions: `financeTracker:{dbId}:transactions`~~ - Now in SQLite ✅
+- ~~Templates: `financeTracker:{dbId}:templates`~~ - Now in SQLite ✅
+- Active DB ID: `financeTracker:activeDb` - Kept in localStorage as a session pointer (database object always fetched from backend)
 
 ### CSV Parsing Edge Cases
 - Handles quoted fields with commas: `"Smith, John",-50.00`
@@ -552,26 +566,24 @@ if (!AppState.requireActiveDatabase()) {
 
 ## Known Limitations
 
-1. **Partial backend migration**: Databases and categories use backend, but transactions and templates still use localStorage
-2. **No authentication**: Backend is open to anyone on localhost
-3. **No export**: Can't export data (only backup via DevTools)
-4. **No bulk edit**: Must edit transactions one-by-one or via review
-5. **No reports**: No charts, graphs, or financial reports
-6. **Single currency**: No multi-currency support
-7. **Local development only**: Backend has no production security features
-8. **Category usage tracking**: When deleting categories, transactions aren't yet updated (transactions still in localStorage)
+1. **No authentication**: Backend is open to anyone on localhost
+2. **No export**: Can't export data (only backup via SQLite file)
+3. **No bulk edit**: Must edit transactions one-by-one or via review
+4. **No reports**: No charts, graphs, or financial reports
+5. **Single currency**: No multi-currency support
+6. **Local development only**: Backend has no production security features
+7. **Category usage tracking**: Deleting a category does not null out `categoryId` on existing transactions (orphaned foreign key, benign since categories table is separate)
 
 ## Potential Next Steps
 
 ### Critical - Complete Backend Migration
-- [ ] Implement transaction endpoints (GET, POST, PUT, DELETE, import)
+- [x] Implement transaction endpoints (GET, POST, PUT, DELETE, import) ✅
 - [x] Implement category endpoints (GET, POST, DELETE) ✅
-- [ ] Implement template endpoints (GET, POST, PUT, DELETE)
-- [ ] Update dashboard.js to use transaction/template APIs (categories done ✅)
-- [ ] Update transactions.js to use transaction/category APIs
-- [ ] Update review.js to use transaction/category APIs
-- [x] Add loading states for API calls (done for categories ✅)
-- [x] Add error handling for network failures (done for categories ✅)
+- [x] Implement template endpoints (GET, POST, DELETE) ✅
+- [x] Update dashboard.js to use transaction/template/category APIs ✅
+- [x] Update transactions.js to use transaction/category APIs ✅
+- [x] Update review.js to use transaction/category APIs ✅
+- [x] Add loading states and error handling for API calls ✅
 
 ### High Priority
 - [ ] Export to CSV functionality
@@ -614,18 +626,18 @@ if (!AppState.requireActiveDatabase()) {
 - [x] Database delete via API works
 - [x] Database get by ID via API works
 - [x] Frontend connects to backend
-- [x] SQLite database file created (finance.db)
+- [x] SQLite database file created at ~/.finance-tracker/data.db
 - [x] State management uses async API calls
 - [x] Dashboard loads database from backend
 - [x] No redirect loop when opening database
 - [x] Category endpoints (GET, POST, DELETE) ✅
-- [x] Category create via API works
-- [x] Category list via API works
-- [x] Category delete via API works
 - [x] Categories persist in SQLite
 - [x] Modal updates without stacking
-- [ ] Transaction endpoints
-- [ ] Template endpoints
+- [x] Transaction endpoints (GET, POST, PUT, DELETE, import) ✅
+- [x] Transactions persist in SQLite
+- [x] Template endpoints (GET, POST, DELETE) ✅
+- [x] Templates persist in SQLite
+- [x] CSV bulk import via API works
 
 ### Frontend Features
 - [x] Create database (via backend API)
@@ -699,34 +711,29 @@ du -sh ~/.finance-tracker/  # Check total size
 
 ### Check localStorage
 ```javascript
-// In browser console
-Object.keys(localStorage).filter(k => k.startsWith('financeTracker'))
-
-// Get databases
-JSON.parse(localStorage.getItem('financeTracker:databases'))
-
-// Get active database ID
+// In browser console — only one key remains
 localStorage.getItem('financeTracker:activeDb')
-
-// Get transactions for a database
-JSON.parse(localStorage.getItem('financeTracker:{dbId}:transactions'))
 ```
 
-### Clear all data
+### Clear session (force back to landing page)
 ```javascript
-Object.keys(localStorage)
-  .filter(k => k.startsWith('financeTracker'))
-  .forEach(k => localStorage.removeItem(k))
+localStorage.removeItem('financeTracker:activeDb')
+```
+
+### Inspect SQLite data directly
+```bash
+sqlite3 ~/.finance-tracker/data.db "SELECT * FROM transactions WHERE database_id = 'some-uuid';"
+sqlite3 ~/.finance-tracker/data.db "SELECT * FROM templates WHERE database_id = 'some-uuid';"
 ```
 
 ### Common Issues
 - **Modal not closing**: Check for JavaScript errors in console
 - **CSV import fails**: Verify column names match exactly (case-sensitive)
-- **Data not persisting**: Check if localStorage is enabled
 - **Splits not calculating**: Check that amounts are numbers, not strings
-- **Dashboard redirects to landing**: Database not found in backend - check server is running
+- **Dashboard redirects to landing**: Database not found in backend — check server is running
 - **"Failed to load database" error**: Backend server down or database was deleted
 - **Async errors**: Make sure all `AppState.setActiveDatabase()` and `getActiveDatabase()` calls use `await`
+- **Review page shows no transactions**: Transactions may not exist in SQLite (old data was in localStorage — clear localStorage and re-import)
 
 ## Code Style Guidelines
 
@@ -753,49 +760,44 @@ This project prioritizes:
 ## Questions for Next Session
 
 ### Backend-related
-- Complete the backend migration by implementing transaction and template endpoints?
 - Add authentication and multi-user support?
 - Deploy backend to production (Docker, cloud hosting)?
-- Add data migration tool from localStorage to SQLite?
 
 ### Feature-related
 - Add export functionality (CSV, JSON)?
 - Add reports/charts for spending analysis?
 - Add more CSV templates for common banks?
-- Add transaction search by amount or date?
+- Add transaction search by amount or date range?
 - Add keyboard shortcuts?
 - Add a "quick add transaction" feature?
+- Transaction deletion from the table view?
 
 ---
 
-**Last Updated**: 2026-02-05 (App data directory: moved to ~/.finance-tracker/, Structural refactor: static files organization with embed.FS, Style fix: split form consistency, Feature: split by percentage, Bug fixes: empty arrays, modal persistence, review categories, dashboard redirect, modal stacking)
-**Status**: ✅ Frontend complete | 🔄 Backend partially complete
+**Last Updated**: 2026-03-06 (Full backend migration: templates + transactions + import endpoint; review.js and dashboard.js fully migrated to SQLite; localStorage now only holds the active DB session pointer)
+**Status**: ✅ Frontend complete | ✅ Backend complete (all data in SQLite)
 
 **Current State**:
 - ✅ Go backend server on localhost:8080
 - ✅ SQLite database at ~/.finance-tracker/data.db
 - ✅ Server logs at ~/.finance-tracker/logs/
 - ✅ Embedded static files (single binary distribution)
-- ✅ Database CRUD operations via API (create, read, delete)
-- ✅ Category CRUD operations via API (create, list, delete)
-- ✅ Transaction CRUD operations via API (create, read, update, delete)
+- ✅ Database CRUD operations via API
+- ✅ Category CRUD operations via API
+- ✅ Transaction CRUD operations via API (including bulk import)
+- ✅ Template CRUD operations via API
 - ✅ Async state management for API integration
-- ✅ Landing page fully migrated to backend
-- ✅ Dashboard loads database info and categories from backend
-- ✅ Transactions page fully migrated to backend (view, edit, filter, search)
-- ✅ Review page loads categories from backend
+- ✅ All 4 pages fully migrated to backend (no localStorage for data)
 - ✅ Split transactions by dollar amount or percentage (0-100%)
 - ✅ Modal component supports async handlers and stays open
-- ✅ Consistent form styling across all split inputs (form-input/form-select classes)
-- ⏳ Review page transaction operations still use localStorage
-- ⏳ CSV import and templates still use localStorage
+- ✅ Consistent form styling across all split inputs
 
 **Working User Flow**:
 1. Create database → Saved to SQLite ✅
 2. Open database → Dashboard loads successfully ✅
 3. Create categories → Saved to SQLite ✅
-4. Create templates → Saved to localStorage ⏳
-5. Import CSV → Saved to localStorage ⏳
+4. Create templates → Saved to SQLite ✅
+5. Import CSV → Transactions bulk-imported to SQLite ✅
 6. View transactions → Loads from SQLite ✅
    - Search by merchant ✅
    - Filter by category/status ✅
@@ -805,13 +807,14 @@ This project prioritizes:
    - Assign categories from dropdown ✅
    - Add/edit splits ✅
    - Add notes ✅
-8. Review transactions → Loads categories from SQLite, transactions from localStorage ⏳
+8. Review transactions → Loads from SQLite, saves to SQLite ✅
    - Assign categories from dropdown ✅
    - Split by dollar or percentage ✅
    - Auto-convert between split types ✅
 
 **Next Recommended Work**:
-1. Implement remaining backend endpoints (transactions, templates)
-2. Migrate dashboard/transactions/review pages to use backend API for transactions/templates
-3. Add authentication for multi-user support
-4. Data migration tool to move localStorage data to SQLite
+1. Add authentication for multi-user support
+2. Export to CSV/JSON functionality
+3. Reports/charts (spending by category, over time)
+4. Transaction deletion from the table view
+5. Date/amount range filtering

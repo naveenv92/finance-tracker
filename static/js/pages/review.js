@@ -3,8 +3,7 @@
  */
 
 import { AppState } from '../core/state.js';
-import { DatabaseManager } from '../core/database.js';
-import { CategoryAPI } from '../core/api.js';
+import { TransactionAPI, CategoryAPI } from '../core/api.js';
 import { Notification } from '../components/notification.js';
 import { DateFormatter } from '../utils/date-formatter.js';
 import { formatCurrency } from '../utils/helpers.js';
@@ -26,7 +25,7 @@ let categories = [];
  */
 async function init() {
   await loadCategories();
-  loadUnreviewedTransactions();
+  await loadUnreviewedTransactions();
   renderReviewContent();
 }
 
@@ -35,10 +34,8 @@ async function init() {
  */
 async function loadCategories() {
   const dbId = AppState.getActiveDatabaseId();
-  console.log('Loading categories for database:', dbId);
   try {
     categories = await CategoryAPI.getAll(dbId);
-    console.log('Loaded categories:', categories);
   } catch (error) {
     console.error('Error loading categories:', error);
     Notification.error('Failed to load categories');
@@ -47,11 +44,18 @@ async function loadCategories() {
 }
 
 /**
- * Load unreviewed transactions
+ * Load unreviewed transactions from backend
  */
-function loadUnreviewedTransactions() {
+async function loadUnreviewedTransactions() {
   const dbId = AppState.getActiveDatabaseId();
-  unreviewedTransactions = DatabaseManager.getUnreviewedTransactions(dbId);
+  try {
+    const all = await TransactionAPI.getAll(dbId);
+    unreviewedTransactions = all.filter(t => !t.reviewed);
+  } catch (error) {
+    console.error('Error loading transactions:', error);
+    Notification.error('Failed to load transactions');
+    unreviewedTransactions = [];
+  }
 }
 
 /**
@@ -90,6 +94,8 @@ function renderCompleteMessage() {
  */
 function renderReviewForm() {
   const transaction = unreviewedTransactions[currentIndex];
+  // Parse splits if stored as JSON string
+  const splits = parseSplits(transaction.splits);
 
   const amountClass = transaction.amount >= 0 ? 'positive' : 'negative';
 
@@ -141,7 +147,7 @@ function renderReviewForm() {
             <button type="button" class="btn btn-secondary btn-small" id="add-split-btn">Add Person</button>
           </div>
           <div class="splits-list" id="splits-list">
-            ${renderSplitsList(transaction.splits, transaction.amount)}
+            ${renderSplitsList(splits, transaction.amount)}
           </div>
           <div id="split-total" class="split-total"></div>
         </div>
@@ -165,6 +171,22 @@ function renderReviewForm() {
       </div>
     </div>
   `;
+}
+
+/**
+ * Parse splits from transaction (may be JSON string or array)
+ */
+function parseSplits(splits) {
+  if (!splits) return [];
+  if (Array.isArray(splits)) return splits;
+  if (typeof splits === 'string' && splits) {
+    try {
+      return JSON.parse(splits);
+    } catch {
+      return [];
+    }
+  }
+  return [];
 }
 
 /**
@@ -430,7 +452,7 @@ function updateSplitTotal(transactionAmount) {
 /**
  * Save current transaction
  */
-function saveTransaction(andMoveNext) {
+async function saveTransaction(andMoveNext) {
   const transaction = unreviewedTransactions[currentIndex];
   const dbId = AppState.getActiveDatabaseId();
 
@@ -458,29 +480,35 @@ function saveTransaction(andMoveNext) {
     merchant,
     categoryId,
     notes,
-    splits,
+    splits: JSON.stringify(splits),
     reviewed: true
   };
 
-  DatabaseManager.updateTransaction(dbId, updated);
+  try {
+    await TransactionAPI.update(dbId, updated);
+    // Update local copy so Previous navigation works correctly
+    unreviewedTransactions[currentIndex] = { ...updated, splits };
+    Notification.success('Transaction saved');
 
-  Notification.success('Transaction saved');
-
-  if (andMoveNext) {
-    goToNext();
+    if (andMoveNext) {
+      goToNext();
+    }
+  } catch (error) {
+    console.error('Error saving transaction:', error);
+    Notification.error('Failed to save transaction');
   }
 }
 
 /**
  * Go to next transaction
  */
-function goToNext() {
+async function goToNext() {
   if (currentIndex < unreviewedTransactions.length - 1) {
     currentIndex++;
     renderReviewContent();
   } else {
     // Reload to check for any remaining unreviewed
-    loadUnreviewedTransactions();
+    await loadUnreviewedTransactions();
     currentIndex = 0;
     renderReviewContent();
   }

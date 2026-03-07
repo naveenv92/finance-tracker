@@ -160,8 +160,16 @@ func handleDatabaseRoutes(w http.ResponseWriter, r *http.Request) {
 		case "transactions":
 			if len(parts) == 2 {
 				handleTransactions(w, r, dbID)
+			} else if parts[2] == "import" {
+				handleTransactionImport(w, r, dbID)
 			} else {
 				handleTransactionByID(w, r, dbID, parts[2])
+			}
+		case "templates":
+			if len(parts) == 2 {
+				handleTemplates(w, r, dbID)
+			} else {
+				handleTemplateByID(w, r, dbID, parts[2])
 			}
 		default:
 			http.Error(w, "Unknown resource", http.StatusNotFound)
@@ -286,6 +294,35 @@ func handleTransactions(w http.ResponseWriter, r *http.Request, dbID string) {
 	}
 }
 
+// handleTransactionImport handles bulk import of transactions
+func handleTransactionImport(w http.ResponseWriter, r *http.Request, dbID string) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Transactions []Transaction `json:"transactions"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	created := make([]*Transaction, 0, len(req.Transactions))
+	for i := range req.Transactions {
+		t, err := CreateTransaction(dbID, &req.Transactions[i])
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		created = append(created, t)
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(created)
+}
+
 // handleTransactionByID handles GET, PUT, and DELETE for specific transaction
 func handleTransactionByID(w http.ResponseWriter, r *http.Request, dbID, transactionID string) {
 	switch r.Method {
@@ -332,3 +369,54 @@ func handleTransactionByID(w http.ResponseWriter, r *http.Request, dbID, transac
 	}
 }
 
+// handleTemplates handles GET (list) and POST (create) for templates
+func handleTemplates(w http.ResponseWriter, r *http.Request, dbID string) {
+	switch r.Method {
+	case http.MethodGet:
+		templates, err := GetTemplates(dbID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		json.NewEncoder(w).Encode(templates)
+
+	case http.MethodPost:
+		var template Template
+		if err := json.NewDecoder(r.Body).Decode(&template); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		if strings.TrimSpace(template.Name) == "" {
+			http.Error(w, "Template name is required", http.StatusBadRequest)
+			return
+		}
+
+		created, err := CreateTemplate(dbID, &template)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(created)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// handleTemplateByID handles DELETE for specific template
+func handleTemplateByID(w http.ResponseWriter, r *http.Request, dbID, templateID string) {
+	switch r.Method {
+	case http.MethodDelete:
+		if err := DeleteTemplate(dbID, templateID); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}

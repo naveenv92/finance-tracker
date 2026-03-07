@@ -373,6 +373,124 @@ func GetCategoryUsageCount(databaseID, categoryID string) (int, error) {
 	return count, nil
 }
 
+// ==================== Template Operations ====================
+
+// Template represents a CSV import template
+type Template struct {
+	ID             string    `json:"id"`
+	DatabaseID     string    `json:"databaseId,omitempty"`
+	Name           string    `json:"name"`
+	DateColumn     string    `json:"dateColumn"`
+	MerchantColumn string    `json:"merchantColumn"`
+	AmountColumn   string    `json:"amountColumn"`
+	DateFormat     string    `json:"dateFormat"`
+	CreatedAt      time.Time `json:"createdAt"`
+}
+
+// CreateTemplate creates a new CSV import template
+func CreateTemplate(databaseID string, template *Template) (*Template, error) {
+	template.ID = uuid.New().String()
+	template.DatabaseID = databaseID
+	template.CreatedAt = time.Now()
+
+	query := `
+		INSERT INTO templates (id, database_id, name, date_column, merchant_column, amount_column, date_format, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`
+
+	_, err := db.Exec(query,
+		template.ID,
+		template.DatabaseID,
+		template.Name,
+		template.DateColumn,
+		template.MerchantColumn,
+		template.AmountColumn,
+		template.DateFormat,
+		template.CreatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create template: %w", err)
+	}
+
+	UpdateDatabaseTimestamp(databaseID)
+	return template, nil
+}
+
+// GetTemplates retrieves all templates for a database
+func GetTemplates(databaseID string) ([]*Template, error) {
+	query := `
+		SELECT id, database_id, name, date_column, merchant_column, amount_column, date_format, created_at
+		FROM templates
+		WHERE database_id = ?
+		ORDER BY created_at ASC
+	`
+
+	rows, err := db.Query(query, databaseID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query templates: %w", err)
+	}
+	defer rows.Close()
+
+	templates := make([]*Template, 0)
+	for rows.Next() {
+		var t Template
+		if err := rows.Scan(&t.ID, &t.DatabaseID, &t.Name, &t.DateColumn, &t.MerchantColumn, &t.AmountColumn, &t.DateFormat, &t.CreatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan template: %w", err)
+		}
+		templates = append(templates, &t)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating templates: %w", err)
+	}
+
+	return templates, nil
+}
+
+// GetTemplate retrieves a template by ID
+func GetTemplate(databaseID, templateID string) (*Template, error) {
+	query := `
+		SELECT id, database_id, name, date_column, merchant_column, amount_column, date_format, created_at
+		FROM templates
+		WHERE id = ? AND database_id = ?
+	`
+
+	var t Template
+	err := db.QueryRow(query, templateID, databaseID).Scan(
+		&t.ID, &t.DatabaseID, &t.Name, &t.DateColumn, &t.MerchantColumn, &t.AmountColumn, &t.DateFormat, &t.CreatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("template not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get template: %w", err)
+	}
+
+	return &t, nil
+}
+
+// DeleteTemplate deletes a template
+func DeleteTemplate(databaseID, templateID string) error {
+	query := `DELETE FROM templates WHERE id = ? AND database_id = ?`
+
+	result, err := db.Exec(query, templateID, databaseID)
+	if err != nil {
+		return fmt.Errorf("failed to delete template: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("template not found")
+	}
+
+	UpdateDatabaseTimestamp(databaseID)
+	return nil
+}
+
 // ==================== Transaction Operations ====================
 
 // CreateTransaction creates a new transaction
