@@ -299,7 +299,8 @@ func handleTransactions(w http.ResponseWriter, r *http.Request, dbID string) {
 	}
 }
 
-// handleTransactionImport handles bulk import of transactions
+// handleTransactionImport handles bulk import of transactions, skipping duplicates.
+// Duplicates are detected by matching date + original_merchant + amount.
 func handleTransactionImport(w http.ResponseWriter, r *http.Request, dbID string) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -314,18 +315,31 @@ func handleTransactionImport(w http.ResponseWriter, r *http.Request, dbID string
 		return
 	}
 
-	created := make([]*Transaction, 0, len(req.Transactions))
+	fingerprints, err := GetTransactionFingerprints(dbID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	imported := 0
+	skipped := 0
 	for i := range req.Transactions {
-		t, err := CreateTransaction(dbID, &req.Transactions[i])
-		if err != nil {
+		t := &req.Transactions[i]
+		key := fmt.Sprintf("%s|%s|%.2f", t.Date, t.OriginalMerchant, t.Amount)
+		if fingerprints[key] {
+			skipped++
+			continue
+		}
+		if _, err := CreateTransaction(dbID, t); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		created = append(created, t)
+		fingerprints[key] = true // prevent dupes within the same batch
+		imported++
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(created)
+	json.NewEncoder(w).Encode(map[string]int{"imported": imported, "skipped": skipped})
 }
 
 // handleTransactionByID handles GET, PUT, and DELETE for specific transaction

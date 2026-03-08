@@ -243,8 +243,13 @@ window.showImportCSVModal = async function() {
         });
 
         try {
-          await TransactionAPI.importMany(dbId, transactions);
-          Notification.success(`Imported ${transactions.length} transactions`);
+          const result = await TransactionAPI.importMany(dbId, transactions);
+          const { imported, skipped } = result;
+          if (skipped > 0) {
+            Notification.success(`Imported ${imported} transaction${imported !== 1 ? 's' : ''}, skipped ${skipped} duplicate${skipped !== 1 ? 's' : ''}`);
+          } else {
+            Notification.success(`Imported ${imported} transaction${imported !== 1 ? 's' : ''}`);
+          }
           await renderStats();
           resolve(true);
         } catch (error) {

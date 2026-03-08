@@ -606,6 +606,29 @@ func GetTransactions(databaseID string) ([]*Transaction, error) {
 	return transactions, nil
 }
 
+// GetTransactionFingerprints returns a set of "date|originalMerchant|amount" keys for all existing
+// transactions in a database, used for de-duplication during import.
+func GetTransactionFingerprints(databaseID string) (map[string]bool, error) {
+	query := `SELECT date, original_merchant, amount FROM transactions WHERE database_id = ?`
+	rows, err := db.Query(query, databaseID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query fingerprints: %w", err)
+	}
+	defer rows.Close()
+
+	fingerprints := make(map[string]bool)
+	for rows.Next() {
+		var date, originalMerchant string
+		var amount float64
+		if err := rows.Scan(&date, &originalMerchant, &amount); err != nil {
+			return nil, fmt.Errorf("failed to scan fingerprint: %w", err)
+		}
+		key := fmt.Sprintf("%s|%s|%.2f", date, originalMerchant, amount)
+		fingerprints[key] = true
+	}
+	return fingerprints, rows.Err()
+}
+
 // GetTransactionsForExport retrieves reviewed transactions for a database, optionally filtered by date range.
 func GetTransactionsForExport(databaseID, startDate, endDate string) ([]*Transaction, error) {
 	query := `
