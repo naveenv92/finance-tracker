@@ -606,6 +606,76 @@ func GetTransactions(databaseID string) ([]*Transaction, error) {
 	return transactions, nil
 }
 
+// GetTransactionsForExport retrieves reviewed transactions for a database, optionally filtered by date range.
+func GetTransactionsForExport(databaseID, startDate, endDate string) ([]*Transaction, error) {
+	query := `
+		SELECT id, database_id, date, merchant, amount, category_id, splits, notes, source
+		FROM transactions
+		WHERE database_id = ? AND reviewed = 1
+	`
+	args := []interface{}{databaseID}
+
+	if startDate != "" {
+		query += " AND date >= ?"
+		args = append(args, startDate)
+	}
+	if endDate != "" {
+		query += " AND date <= ?"
+		args = append(args, endDate)
+	}
+	query += " ORDER BY date DESC, imported_at DESC"
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query transactions for export: %w", err)
+	}
+	defer rows.Close()
+
+	transactions := make([]*Transaction, 0)
+	for rows.Next() {
+		var t Transaction
+		var categoryID sql.NullString
+		var splits sql.NullString
+		var notes sql.NullString
+		var source sql.NullString
+
+		if err := rows.Scan(
+			&t.ID,
+			&t.DatabaseID,
+			&t.Date,
+			&t.Merchant,
+			&t.Amount,
+			&categoryID,
+			&splits,
+			&notes,
+			&source,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan transaction: %w", err)
+		}
+
+		if categoryID.Valid {
+			t.CategoryID = &categoryID.String
+		}
+		if splits.Valid {
+			t.Splits = splits.String
+		}
+		if notes.Valid {
+			t.Notes = notes.String
+		}
+		if source.Valid {
+			t.Source = source.String
+		}
+
+		transactions = append(transactions, &t)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating transactions: %w", err)
+	}
+
+	return transactions, nil
+}
+
 // GetTransaction retrieves a transaction by ID
 func GetTransaction(databaseID, transactionID string) (*Transaction, error) {
 	query := `

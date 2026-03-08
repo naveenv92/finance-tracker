@@ -85,6 +85,7 @@ function setupEventListeners() {
     filterTransactions();
   }, 300));
 
+  document.getElementById('export-csv-btn').addEventListener('click', showExportModal);
   document.getElementById('add-transaction-btn').addEventListener('click', showAddTransactionModal);
 }
 
@@ -897,3 +898,83 @@ function updateSplitTotal(transactionAmount) {
     input.addEventListener('input', () => updateSplitTotal(transactionAmount));
   });
 }
+
+/**
+ * Show export CSV modal
+ */
+async function showExportModal() {
+  const today = new Date().toISOString().slice(0, 10);
+  const defaultFilename = `transactions-${today}`;
+  const supportsFilePicker = typeof window.showSaveFilePicker === 'function';
+
+  const contentHTML = `
+    <div class="form-group">
+      <label for="export-start" class="form-label">Start Date <span style="color: var(--gray-500); font-weight: normal;">(optional)</span></label>
+      <input type="date" id="export-start" class="form-input">
+    </div>
+    <div class="form-group">
+      <label for="export-end" class="form-label">End Date <span style="color: var(--gray-500); font-weight: normal;">(optional)</span></label>
+      <input type="date" id="export-end" class="form-input" value="${today}">
+    </div>
+    <div class="form-group">
+      <label for="export-filename" class="form-label">Filename</label>
+      <div style="display: flex; align-items: center; gap: var(--spacing-xs);">
+        <input type="text" id="export-filename" class="form-input" value="${defaultFilename}" style="flex: 1;">
+        <span style="color: var(--gray-500); white-space: nowrap;">.csv</span>
+      </div>
+    </div>
+    ${!supportsFilePicker ? `<p style="font-size: var(--font-size-sm); color: var(--gray-500); margin-top: var(--spacing-sm);">File will be saved to your default downloads folder.</p>` : ''}
+  `;
+
+  const modal = Modal.create('export-modal', 'Export Transactions as CSV', contentHTML);
+  modal.setSubmitText(supportsFilePicker ? 'Choose Location & Export' : 'Download CSV');
+
+  modal.setSubmitHandler(async () => {
+    const startDate = document.getElementById('export-start').value;
+    const endDate = document.getElementById('export-end').value;
+    const filenameInput = document.getElementById('export-filename').value.trim() || defaultFilename;
+    const filename = filenameInput.endsWith('.csv') ? filenameInput : `${filenameInput}.csv`;
+
+    const dbId = AppState.getActiveDatabaseId();
+    const params = new URLSearchParams({ filename });
+    if (startDate) params.set('start', startDate);
+    if (endDate) params.set('end', endDate);
+    const url = `http://localhost:8080/api/databases/${dbId}/transactions/export?${params}`;
+
+    try {
+      if (supportsFilePicker) {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(await response.text());
+        const csvText = await response.text();
+
+        if (csvText.trim().split('\n').length <= 1) {
+          Notification.error('No transactions found in the selected date range');
+          return false;
+        }
+
+        const fileHandle = await window.showSaveFilePicker({
+          suggestedName: filename,
+          types: [{ description: 'CSV file', accept: { 'text/csv': ['.csv'] } }],
+        });
+        const writable = await fileHandle.createWritable();
+        await writable.write(csvText);
+        await writable.close();
+        Notification.success('Exported successfully');
+      } else {
+        // Fallback: let the browser download directly
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+      }
+    } catch (error) {
+      if (error.name === 'AbortError') return false; // user cancelled file picker
+      console.error('Export failed:', error);
+      Notification.error('Export failed');
+      return false;
+    }
+  });
+
+  modal.show();
+}
+

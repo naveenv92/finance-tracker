@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -162,6 +163,8 @@ func handleDatabaseRoutes(w http.ResponseWriter, r *http.Request) {
 				handleTransactions(w, r, dbID)
 			} else if parts[2] == "import" {
 				handleTransactionImport(w, r, dbID)
+			} else if parts[2] == "export" {
+				handleTransactionExport(w, r, dbID)
 			} else {
 				handleTransactionByID(w, r, dbID, parts[2])
 			}
@@ -369,6 +372,97 @@ func handleTransactionByID(w http.ResponseWriter, r *http.Request, dbID, transac
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// handleTransactionExport streams a CSV of reviewed transactions, optionally filtered by date range.
+// GET /api/databases/:id/transactions/export?start=YYYY-MM-DD&end=YYYY-MM-DD&filename=name.csv
+func handleTransactionExport(w http.ResponseWriter, r *http.Request, dbID string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	startDate := r.URL.Query().Get("start")
+	endDate := r.URL.Query().Get("end")
+	filename := strings.TrimSpace(r.URL.Query().Get("filename"))
+	if filename == "" {
+		filename = fmt.Sprintf("transactions-%s.csv", time.Now().Format("2006-01-02"))
+	}
+	if !strings.HasSuffix(filename, ".csv") {
+		filename += ".csv"
+	}
+
+	transactions, err := GetTransactionsForExport(dbID, startDate, endDate)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Build category map for name lookup
+	categories, err := GetCategories(dbID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	categoryMap := make(map[string]*Category, len(categories))
+	for _, c := range categories {
+		categoryMap[c.ID] = c
+	}
+
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+
+	cw := csv.NewWriter(w)
+	_ = cw.Write([]string{"Date", "Merchant", "Amount", "Category", "Source", "Notes", "Splits"})
+
+	for _, t := range transactions {
+		categoryName := ""
+		if t.CategoryID != nil {
+			if cat, ok := categoryMap[*t.CategoryID]; ok {
+				categoryName = strings.TrimSpace(cat.Emoji + " " + cat.Name)
+			}
+		}
+
+		splitsStr := formatSplitsForCSV(t.Splits)
+
+		_ = cw.Write([]string{
+			t.Date,
+			t.Merchant,
+			fmt.Sprintf("%.2f", t.Amount),
+			categoryName,
+			t.Source,
+			t.Notes,
+			splitsStr,
+		})
+	}
+
+	cw.Flush()
+	if err := cw.Error(); err != nil {
+		log.Printf("CSV write error: %v", err)
+	}
+}
+
+// formatSplitsForCSV formats a JSON splits string into a human-readable form.
+func formatSplitsForCSV(splitsJSON string) string {
+	if splitsJSON == "" {
+		return ""
+	}
+
+	type splitEntry struct {
+		PersonName string  `json:"personName"`
+		Amount     float64 `json:"amount"`
+	}
+
+	var splits []splitEntry
+	if err := json.Unmarshal([]byte(splitsJSON), &splits); err != nil || len(splits) == 0 {
+		return ""
+	}
+
+	parts := make([]string, 0, len(splits))
+	for _, s := range splits {
+		parts = append(parts, fmt.Sprintf("%s: $%.2f", s.PersonName, s.Amount))
+	}
+	return strings.Join(parts, "; ")
 }
 
 // handleTemplates handles GET (list) and POST (create) for templates
