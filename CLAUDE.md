@@ -112,10 +112,13 @@ AppState.requireActiveDatabase();          // sync guard, redirects to index.htm
 - Person filter shows individual split amount; `(split)` label when >1 person in splits
 
 ### Analytics Page (Chart.js CDN)
-- Charts: Total Spent stat, Avg/Day stat, Spending Over Time (bar/month), By Category (donut), By Source (donut)
-- Filters: Start/End Date, Person — apply to all charts simultaneously
-- All amounts use `Math.abs()` regardless of debitSign convention
-- Chart instances stored in `chartInstances` map; destroyed before re-render
+- Stats: Total Spent Lifetime, Total Spent This Month, Avg/Day Lifetime, Avg/Day This Month (2×2 layout)
+  - Lifetime avg/day: total / days between min and max transaction date
+  - Monthly avg/day: month total / days between min and max transaction date in that month
+- Spending Over Time: grouped bar chart, last 12 calendar months; left axis = total spent, right axis = avg/day (total / days in that calendar month)
+- By Category (donut), By Source (donut)
+- Filter: Person only — applies to all charts; uses individual split amount when person is selected
+- All amounts use `Math.abs()`; chart instances stored in `chartInstances` map, destroyed before re-render
 
 ### CSV Import
 - Template maps date/merchant/amount columns + date format + debit sign

@@ -18,10 +18,16 @@
 }
 
 .analytics-stats {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-xl);
+}
+
+.analytics-stats-row {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: var(--spacing-lg);
-  margin-bottom: var(--spacing-xl);
 }
 
 .stat-card {
@@ -85,7 +91,7 @@
 }
 
 @media (max-width: 900px) {
-  .analytics-stats {
+  .analytics-stats-row {
     grid-template-columns: 1fr;
   }
 

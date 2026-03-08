@@ -69,14 +69,6 @@ function renderFilters() {
   document.getElementById('analytics-filters').innerHTML = `
     <div class="analytics-filter-row">
       <div class="analytics-filter">
-        <label class="form-label">Start Date</label>
-        <input type="date" id="filter-date-start" class="form-input">
-      </div>
-      <div class="analytics-filter">
-        <label class="form-label">End Date</label>
-        <input type="date" id="filter-date-end" class="form-input">
-      </div>
-      <div class="analytics-filter">
         <label for="filter-person" class="form-label">Person</label>
         <select id="filter-person" class="form-select">
           <option value="">All People</option>
@@ -86,8 +78,6 @@ function renderFilters() {
     </div>
   `;
 
-  document.getElementById('filter-date-start').addEventListener('change', applyFilters);
-  document.getElementById('filter-date-end').addEventListener('change', applyFilters);
   document.getElementById('filter-person').addEventListener('change', applyFilters);
 }
 
@@ -95,15 +85,9 @@ function renderFilters() {
  * Read filters, filter transactions, destroy old charts, re-render everything
  */
 function applyFilters() {
-  const dateStart = document.getElementById('filter-date-start')?.value || '';
-  const dateEnd   = document.getElementById('filter-date-end')?.value   || '';
-  const person    = document.getElementById('filter-person')?.value     || '';
+  const person = document.getElementById('filter-person')?.value || '';
 
   let filtered = allTransactions.filter(t => {
-    const matchesDate = (!dateStart || t.date >= dateStart) &&
-                        (!dateEnd   || t.date <= dateEnd);
-    if (!matchesDate) return false;
-
     if (person) {
       const split = parseSplits(t.splits).find(s => s.personName === person);
       return !!split;
@@ -134,41 +118,79 @@ function destroyCharts() {
 }
 
 /**
- * Render the two large stat numbers
+ * Render the four stat numbers: lifetime and this-month totals + avg/day
  */
 function renderStats(transactions) {
-  const total = transactions.reduce((sum, t) => sum + Math.abs(t.amount), 0);
-  document.getElementById('stat-total').textContent = formatCurrency(total);
+  const now = new Date();
+  const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
+  const monthTxns = transactions.filter(t => t.date.slice(0, 7) === thisMonth);
+
+  const totalLifetime = transactions.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+  const totalMonth    = monthTxns.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
+  document.getElementById('stat-total-lifetime').textContent = formatCurrency(totalLifetime);
+  document.getElementById('stat-total-month').textContent    = formatCurrency(totalMonth);
+
+  // Lifetime avg/day: days between min and max transaction date
   if (transactions.length === 0) {
-    document.getElementById('stat-avg-day').textContent = formatCurrency(0);
+    document.getElementById('stat-avg-day-lifetime').textContent = formatCurrency(0);
+    document.getElementById('stat-avg-day-month').textContent    = formatCurrency(0);
     return;
   }
 
-  const dates = transactions.map(t => t.date).sort();
-  const minDate = new Date(dates[0]);
-  const maxDate = new Date(dates[dates.length - 1]);
-  const days = Math.max(1, Math.round((maxDate - minDate) / (1000 * 60 * 60 * 24)) + 1);
+  const allDates = transactions.map(t => t.date).sort();
+  const lifetimeDays = Math.max(1, Math.round(
+    (new Date(allDates[allDates.length - 1]) - new Date(allDates[0])) / (1000 * 60 * 60 * 24)
+  ) + 1);
+  document.getElementById('stat-avg-day-lifetime').textContent = formatCurrency(totalLifetime / lifetimeDays);
 
-  document.getElementById('stat-avg-day').textContent = formatCurrency(total / days);
+  // This-month avg/day: days between min and max transaction date within the month
+  if (monthTxns.length === 0) {
+    document.getElementById('stat-avg-day-month').textContent = formatCurrency(0);
+    return;
+  }
+
+  const monthDates = monthTxns.map(t => t.date).sort();
+  const monthDays = Math.max(1, Math.round(
+    (new Date(monthDates[monthDates.length - 1]) - new Date(monthDates[0])) / (1000 * 60 * 60 * 24)
+  ) + 1);
+  document.getElementById('stat-avg-day-month').textContent = formatCurrency(totalMonth / monthDays);
 }
 
 /**
- * Bar chart: spending grouped by month
+ * Returns the number of days in a given YYYY-MM month string
+ */
+function daysInMonth(monthStr) {
+  const [year, month] = monthStr.split('-').map(Number);
+  return new Date(year, month, 0).getDate();
+}
+
+/**
+ * Grouped bar chart: last 12 months — total spending (left axis) + avg/day (right axis)
  */
 function renderSpendingOverTime(transactions) {
-  const byMonth = {};
-  for (const t of transactions) {
-    const month = t.date.slice(0, 7);
-    byMonth[month] = (byMonth[month] || 0) + Math.abs(t.amount);
+  // Build the last 12 month keys in order
+  const now = new Date();
+  const months = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
   }
 
-  const labels = Object.keys(byMonth).sort();
-  const data = labels.map(m => parseFloat(byMonth[m].toFixed(2)));
-  const formattedLabels = labels.map(m => {
-    const [year, month] = m.split('-');
-    return new Date(parseInt(year), parseInt(month) - 1, 1)
-      .toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  // Aggregate totals per month
+  const byMonth = {};
+  for (const t of transactions) {
+    const m = t.date.slice(0, 7);
+    if (months.includes(m)) byMonth[m] = (byMonth[m] || 0) + Math.abs(t.amount);
+  }
+
+  const totals  = months.map(m => parseFloat((byMonth[m] || 0).toFixed(2)));
+  const avgDays = months.map((m, i) => parseFloat((totals[i] / daysInMonth(m)).toFixed(2)));
+
+  const formattedLabels = months.map(m => {
+    const [year, month] = m.split('-').map(Number);
+    return new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
   });
 
   const ctx = document.getElementById('chart-spending-over-time').getContext('2d');
@@ -176,27 +198,52 @@ function renderSpendingOverTime(transactions) {
     type: 'bar',
     data: {
       labels: formattedLabels,
-      datasets: [{
-        label: 'Spending',
-        data,
-        backgroundColor: '#4A90E2cc',
-        borderColor: '#4A90E2',
-        borderWidth: 1,
-        borderRadius: 4
-      }]
+      datasets: [
+        {
+          label: 'Total Spent',
+          data: totals,
+          backgroundColor: '#4A90E2cc',
+          borderColor: '#4A90E2',
+          borderWidth: 1,
+          borderRadius: 4,
+          yAxisID: 'yLeft'
+        },
+        {
+          label: 'Avg / Day',
+          data: avgDays,
+          backgroundColor: '#10B981cc',
+          borderColor: '#10B981',
+          borderWidth: 1,
+          borderRadius: 4,
+          yAxisID: 'yRight'
+        }
+      ]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: { label: ctx => formatCurrency(ctx.parsed.y) } }
+        legend: { display: true, position: 'top' },
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.dataset.label}: ${formatCurrency(ctx.parsed.y)}`
+          }
+        }
       },
       scales: {
-        y: {
+        yLeft: {
+          type: 'linear',
+          position: 'left',
           beginAtZero: true,
           ticks: { callback: v => formatCurrency(v) },
           grid: { color: '#E5E7EB' }
+        },
+        yRight: {
+          type: 'linear',
+          position: 'right',
+          beginAtZero: true,
+          ticks: { callback: v => formatCurrency(v) },
+          grid: { drawOnChartArea: false }
         },
         x: { grid: { display: false } }
       }
