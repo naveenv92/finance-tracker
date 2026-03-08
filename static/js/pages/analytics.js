@@ -25,6 +25,9 @@ const CHART_COLORS = [
 let allTransactions = [];
 let allCategories = [];
 let chartInstances = {};
+let currentDisplayTransactions = [];
+let disabledCategories = new Set();
+let disabledSources = new Set();
 
 async function init() {
   const dbId = AppState.getActiveDatabaseId();
@@ -96,17 +99,21 @@ function applyFilters() {
   });
 
   // When filtering by person, use their individual split amount
-  const displayTransactions = filtered.map(t => {
+  currentDisplayTransactions = filtered.map(t => {
     if (!person) return t;
     const split = parseSplits(t.splits).find(s => s.personName === person);
     return { ...t, amount: split ? split.amount : t.amount };
   });
 
+  // Reset toggles when person filter changes (data context changes)
+  disabledCategories = new Set();
+  disabledSources = new Set();
+
   destroyCharts();
-  renderStats(displayTransactions);
-  renderSpendingOverTime(displayTransactions);
-  renderByCategory(displayTransactions, allCategories);
-  renderBySource(displayTransactions);
+  renderStats(currentDisplayTransactions);
+  renderSpendingOverTime(currentDisplayTransactions);
+  renderByCategory(currentDisplayTransactions, allCategories);
+  renderBySource(currentDisplayTransactions);
 }
 
 /**
@@ -252,77 +259,169 @@ function renderSpendingOverTime(transactions) {
 }
 
 /**
- * Donut chart: spending by category
+ * Returns last 12 calendar month keys as YYYY-MM strings
+ */
+function getLast12Months() {
+  const now = new Date();
+  const months = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  }
+  return months;
+}
+
+/**
+ * Format YYYY-MM to short display label
+ */
+function formatMonthLabel(m) {
+  const [year, month] = m.split('-').map(Number);
+  return new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+}
+
+/**
+ * Get display label for a transaction's category
+ */
+function getCategoryLabel(t, catMap) {
+  return t.categoryId && catMap[t.categoryId]
+    ? `${catMap[t.categoryId].emoji || ''} ${catMap[t.categoryId].name}`.trim()
+    : 'Uncategorized';
+}
+
+/**
+ * Stacked bar chart: spending by category over last 12 months
  */
 function renderByCategory(transactions, categories) {
+  const months = getLast12Months();
   const catMap = {};
   for (const c of categories) catMap[c.id] = c;
 
-  const byCategory = {};
-  for (const t of transactions) {
-    const label = t.categoryId && catMap[t.categoryId]
-      ? `${catMap[t.categoryId].emoji || ''} ${catMap[t.categoryId].name}`.trim()
-      : 'Uncategorized';
-    byCategory[label] = (byCategory[label] || 0) + Math.abs(t.amount);
-  }
+  const labelSet = new Set();
+  for (const t of transactions) labelSet.add(getCategoryLabel(t, catMap));
+  const allLabels = [...labelSet].sort();
 
-  chartInstances['category'] = renderDonut('chart-by-category', byCategory);
+  const colorMap = {};
+  allLabels.forEach((label, i) => { colorMap[label] = CHART_COLORS[i % CHART_COLORS.length]; });
+
+  const datasets = allLabels
+    .filter(label => !disabledCategories.has(label))
+    .map(label => ({
+      label,
+      data: months.map(m =>
+        parseFloat(transactions
+          .filter(t => t.date.slice(0, 7) === m && getCategoryLabel(t, catMap) === label)
+          .reduce((sum, t) => sum + Math.abs(t.amount), 0)
+          .toFixed(2))
+      ),
+      backgroundColor: colorMap[label] + 'cc',
+      borderColor: colorMap[label],
+      borderWidth: 1,
+      stack: 'stack0'
+    }));
+
+  if (chartInstances['category']) chartInstances['category'].destroy();
+  chartInstances['category'] = renderStackedBar('chart-by-category', months, datasets);
+
+  renderLegend('legend-by-category', allLabels, colorMap, disabledCategories, (label, disabled) => {
+    if (disabled) disabledCategories.add(label);
+    else disabledCategories.delete(label);
+    renderByCategory(currentDisplayTransactions, allCategories);
+  });
 }
 
 /**
- * Donut chart: spending by source
+ * Stacked bar chart: spending by source over last 12 months
  */
 function renderBySource(transactions) {
-  const bySource = {};
-  for (const t of transactions) {
-    const label = t.source || 'Unknown';
-    bySource[label] = (bySource[label] || 0) + Math.abs(t.amount);
-  }
+  const months = getLast12Months();
 
-  chartInstances['source'] = renderDonut('chart-by-source', bySource);
+  const labelSet = new Set();
+  for (const t of transactions) labelSet.add(t.source || 'Unknown');
+  const allLabels = [...labelSet].sort();
+
+  const colorMap = {};
+  allLabels.forEach((label, i) => { colorMap[label] = CHART_COLORS[i % CHART_COLORS.length]; });
+
+  const datasets = allLabels
+    .filter(label => !disabledSources.has(label))
+    .map(label => ({
+      label,
+      data: months.map(m =>
+        parseFloat(transactions
+          .filter(t => t.date.slice(0, 7) === m && (t.source || 'Unknown') === label)
+          .reduce((sum, t) => sum + Math.abs(t.amount), 0)
+          .toFixed(2))
+      ),
+      backgroundColor: colorMap[label] + 'cc',
+      borderColor: colorMap[label],
+      borderWidth: 1,
+      stack: 'stack0'
+    }));
+
+  if (chartInstances['source']) chartInstances['source'].destroy();
+  chartInstances['source'] = renderStackedBar('chart-by-source', months, datasets);
+
+  renderLegend('legend-by-source', allLabels, colorMap, disabledSources, (label, disabled) => {
+    if (disabled) disabledSources.add(label);
+    else disabledSources.delete(label);
+    renderBySource(currentDisplayTransactions);
+  });
 }
 
 /**
- * Shared donut chart renderer — returns the Chart instance
+ * Shared stacked bar chart renderer — returns the Chart instance
  */
-function renderDonut(canvasId, dataMap) {
-  const sorted = Object.entries(dataMap).sort((a, b) => b[1] - a[1]);
-  const labels = sorted.map(([k]) => k);
-  const data = sorted.map(([, v]) => parseFloat(v.toFixed(2)));
-  const colors = labels.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]);
-
+function renderStackedBar(canvasId, months, datasets) {
   const ctx = document.getElementById(canvasId).getContext('2d');
   return new Chart(ctx, {
-    type: 'doughnut',
-    data: {
-      labels,
-      datasets: [{
-        data,
-        backgroundColor: colors,
-        borderColor: '#ffffff',
-        borderWidth: 2,
-        hoverOffset: 6
-      }]
-    },
+    type: 'bar',
+    data: { labels: months.map(formatMonthLabel), datasets },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: {
-          position: 'bottom',
-          labels: { padding: 16, font: { size: 13 }, usePointStyle: true, pointStyleWidth: 10 }
-        },
+        legend: { display: false },
         tooltip: {
           callbacks: {
-            label: ctx => {
-              const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
-              const pct = total > 0 ? ((ctx.parsed / total) * 100).toFixed(1) : 0;
-              return ` ${formatCurrency(ctx.parsed)} (${pct}%)`;
-            }
+            label: ctx => `${ctx.dataset.label}: ${formatCurrency(ctx.parsed.y)}`
           }
         }
       },
-      cutout: '60%'
+      scales: {
+        x: { stacked: true, grid: { display: false } },
+        y: {
+          stacked: true,
+          beginAtZero: true,
+          ticks: { callback: v => formatCurrency(v) },
+          grid: { color: '#E5E7EB' }
+        }
+      }
     }
+  });
+}
+
+/**
+ * Render interactive checkbox legend below a chart
+ */
+function renderLegend(containerId, allLabels, colorMap, disabledSet, onToggle) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = allLabels.map(label => {
+    const isDisabled = disabledSet.has(label);
+    const color = colorMap[label];
+    const safeLabel = encodeURIComponent(label);
+    return `
+      <label class="legend-item${isDisabled ? ' legend-item--disabled' : ''}">
+        <input type="checkbox" ${isDisabled ? '' : 'checked'} data-label="${safeLabel}">
+        <span class="legend-color" style="background:${color}"></span>
+        <span>${label}</span>
+      </label>
+    `;
+  }).join('');
+
+  container.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', e => {
+      const label = decodeURIComponent(e.target.dataset.label);
+      onToggle(label, !e.target.checked);
+    });
   });
 }

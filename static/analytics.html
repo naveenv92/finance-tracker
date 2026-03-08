@@ -72,20 +72,22 @@
         </div>
       </div>
 
-      <!-- Donut Charts Row -->
-      <div class="analytics-donuts">
-        <div class="analytics-card">
-          <h2 class="analytics-card-title">Spending by Category</h2>
-          <div class="chart-container chart-container--donut">
-            <canvas id="chart-by-category"></canvas>
-          </div>
+      <!-- Stacked Bar: By Category -->
+      <div class="analytics-card">
+        <h2 class="analytics-card-title">Spending by Category</h2>
+        <div class="chart-container chart-container--stacked">
+          <canvas id="chart-by-category"></canvas>
         </div>
-        <div class="analytics-card">
-          <h2 class="analytics-card-title">Spending by Source</h2>
-          <div class="chart-container chart-container--donut">
-            <canvas id="chart-by-source"></canvas>
-          </div>
+        <div class="chart-legend" id="legend-by-category"></div>
+      </div>
+
+      <!-- Stacked Bar: By Source -->
+      <div class="analytics-card">
+        <h2 class="analytics-card-title">Spending by Source</h2>
+        <div class="chart-container chart-container--stacked">
+          <canvas id="chart-by-source"></canvas>
         </div>
+        <div class="chart-legend" id="legend-by-source"></div>
       </div>
     </main>
   </div>

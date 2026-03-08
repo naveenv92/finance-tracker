@@ -116,9 +116,11 @@ AppState.requireActiveDatabase();          // sync guard, redirects to index.htm
   - Lifetime avg/day: total / days between min and max transaction date
   - Monthly avg/day: month total / days between min and max transaction date in that month
 - Spending Over Time: grouped bar chart, last 12 calendar months; left axis = total spent, right axis = avg/day (total / days in that calendar month)
-- By Category (donut), By Source (donut)
-- Filter: Person only — applies to all charts; uses individual split amount when person is selected
+- By Category: stacked bar chart, last 12 months, one dataset per category; interactive checkbox legend to toggle categories
+- By Source: same as By Category but grouped by transaction source
+- Filter: Person only — applies to all charts; uses individual split amount when person is selected; resets category/source toggles on change
 - All amounts use `Math.abs()`; chart instances stored in `chartInstances` map, destroyed before re-render
+- `disabledCategories` / `disabledSources` (module-level Sets) track toggled-off labels; stable color assignment based on sorted label order
 
 ### CSV Import
 - Template maps date/merchant/amount columns + date format + debit sign
@@ -195,3 +197,4 @@ localStorage.removeItem('financeTracker:activeDb') // clear session
 
 ---
 **Last Updated**: 2026-03-07 | **Status**: ✅ All features complete
+<!-- Analytics: donut charts replaced with stacked bar charts (by category + by source) with interactive checkbox legends -->

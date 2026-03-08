@@ -166,9 +166,13 @@ window.showImportCSVModal = async function() {
   const contentHTML = `
     <form id="import-csv-form">
       <div class="form-group">
-        <label for="csv-file" class="form-label required">CSV File</label>
-        <input type="file" id="csv-file" name="file" class="form-input" accept=".csv" required>
-        <span class="form-help">Select a CSV file to import</span>
+        <label class="form-label required">CSV File</label>
+        <div class="file-upload-area" id="csv-drop-zone" role="button" tabindex="0" aria-label="Upload CSV file">
+          <div class="file-upload-icon">📄</div>
+          <div class="file-upload-text">Drop your CSV here or <span style="color:var(--color-primary);font-weight:var(--font-weight-medium)">browse</span></div>
+          <div class="file-upload-hint" id="csv-file-hint">Accepts .csv files</div>
+        </div>
+        <input type="file" id="csv-file" name="file" accept=".csv" required style="display:none">
       </div>
       <div class="form-group">
         <label for="template-select" class="form-label required">CSV Template</label>
@@ -253,6 +257,42 @@ window.showImportCSVModal = async function() {
   });
 
   modal.show();
+
+  // Wire up the styled file drop zone — must be after show() so elements are in the DOM
+  const dropZone = document.getElementById('csv-drop-zone');
+  const fileInput = document.getElementById('csv-file');
+  const fileHint = document.getElementById('csv-file-hint');
+
+  const updateDropZone = (file) => {
+    if (file) {
+      fileHint.textContent = `✓ ${file.name}`;
+      fileHint.style.color = 'var(--color-success)';
+      dropZone.style.borderColor = 'var(--color-success)';
+      dropZone.style.backgroundColor = 'rgba(16, 185, 129, 0.05)';
+    } else {
+      fileHint.textContent = 'Accepts .csv files';
+      fileHint.style.color = '';
+      dropZone.style.borderColor = '';
+      dropZone.style.backgroundColor = '';
+    }
+  };
+
+  dropZone.addEventListener('click', () => fileInput.click());
+  dropZone.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') fileInput.click(); });
+  fileInput.addEventListener('change', () => updateDropZone(fileInput.files[0] || null));
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      fileInput.files = dt.files;
+      updateDropZone(file);
+    }
+  });
 };
 
 /**
