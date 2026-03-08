@@ -155,6 +155,28 @@ Templates now store a `debitSign` field (`"positive"` or `"negative"`, default `
 - **`database.go`**: Added `DebitSign string` to `Template` struct; added `debit_sign TEXT NOT NULL DEFAULT 'positive'` column to the `templates` schema; updated `CreateTemplate`, `GetTemplates`, `GetTemplate` to include the field
 - **`dashboard.js`**: Radio buttons added to template form; import logic applies `* -1` when `debitSign === 'negative'`
 
+### Feature: Emoji Picker for Category Creation (2026-03-07) ✅
+
+Replaced the free-text emoji input in the category creation form with a curated grid picker. The input is now readonly; users select an emoji from ~100 options across 10 categories (Food & Drink, Transport, Shopping, Home, Health, Entertainment, Finance, Utilities, People, Other) or clear the selection. The picker closes when clicking outside.
+
+**Changes**:
+- **`dashboard.js`**: Added `toggleEmojiPicker()`, `selectEmoji()`, `clearEmoji()` global functions; replaced emoji text input with picker button + dropdown grid; added click-outside listener (registered once via `emojiPickerListenerAdded` guard)
+
+### Feature: Amount Range Slider Filter on View Transactions (2026-03-07) ✅
+
+Added a dual-range slider to the transactions filter bar for filtering by transaction amount. The slider range is $0 to the max absolute transaction amount in the DB (rounded up). Dragging either handle updates the visible range label and filters the table live. Filters by absolute value so both expenses and income are covered.
+
+**Changes**:
+- **`transactions.js`**: Added `maxAmount` module variable; compute max after loading; added dual-range slider HTML to `renderFilters`; added `updateRangeFill()` and event listeners; added amount filter logic to `filterTransactions`
+- **`transactions.css`**: Added `.amount-filter`, `.range-slider-wrapper`, `.range-track`, `.range-fill`, `.range-input` styles with cross-browser thumb support (WebKit + Firefox)
+
+### Feature: Date Range Filter on View Transactions (2026-03-07) ✅
+
+Added Start Date and End Date inputs to the transactions filter bar using native `<input type="date">`, which opens the browser's built-in calendar picker. Default state (both empty) shows all transactions. Either field can be set independently.
+
+**Changes**:
+- **`transactions.js`**: Added Start Date and End Date `<input type="date">` fields to `renderFilters`; added `change` listeners; added date filter logic to `filterTransactions` (YYYY-MM-DD string comparison)
+
 ### Feature: Transaction Source Field (2026-03-07) ✅
 
 Transactions now store a `source` field set to the name of the CSV template used during import. Displayed as a "Source" column on the View Transactions page (shows `—` if absent).
@@ -618,8 +640,8 @@ if (!AppState.requireActiveDatabase()) {
 - [ ] Bulk transaction editing
 - [x] Transaction deletion from review page ✅
 - [ ] Transaction deletion from table view
-- [ ] Date range filtering
-- [ ] Amount range filtering
+- [x] Date range filtering ✅
+- [x] Amount range filtering ✅
 
 ### Medium Priority
 - [ ] Reports/charts (spending by category, over time)
@@ -682,6 +704,8 @@ if (!AppState.requireActiveDatabase()) {
 - [x] Search transactions
 - [x] Filter by category
 - [x] Only reviewed transactions shown in table (filter by review status removed)
+- [x] Filter by date range (start/end date pickers)
+- [x] Filter by amount range (dual-range slider)
 - [x] Sort table columns
 - [x] Edit transaction from table
 - [x] Pagination works
@@ -803,7 +827,7 @@ This project prioritizes:
 
 ---
 
-**Last Updated**: 2026-03-07 (Delete from review; reviewed-only transactions view; template debit sign; transaction source field)
+**Last Updated**: 2026-03-07 (Emoji picker for categories; amount range slider filter; date range filter; delete from review; reviewed-only transactions view; template debit sign; transaction source field)
 **Status**: ✅ Frontend complete | ✅ Backend complete (all data in SQLite)
 
 **Current State**:
@@ -824,6 +848,9 @@ This project prioritizes:
 - ✅ View Transactions shows only reviewed transactions
 - ✅ Template debit sign (`positive`/`negative`) controls amount sign during import
 - ✅ Transaction `source` field stores the template name used during import
+- ✅ Emoji picker for category creation (grid of ~100 emojis, no external dependencies)
+- ✅ Amount range filter on View Transactions (dual-range slider, dynamic max)
+- ✅ Date range filter on View Transactions (native date pickers, default = all dates)
 
 **Working User Flow**:
 1. Create database → Saved to SQLite ✅
@@ -837,6 +864,8 @@ This project prioritizes:
 6. View transactions → Loads reviewed transactions from SQLite ✅
    - Search by merchant ✅
    - Filter by category ✅
+   - Filter by date range (start/end date pickers) ✅
+   - Filter by amount range (dual-range slider) ✅
    - Source column shown ✅
    - Click to edit in modal ✅
 7. Edit transaction → Updates in SQLite ✅

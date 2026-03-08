@@ -22,6 +22,7 @@ let table;
 let allTransactions = [];
 let filteredTransactions = [];
 let currentPage = 1;
+let maxAmount = 0;
 const rowsPerPage = 50;
 
 /**
@@ -44,6 +45,9 @@ async function loadTransactions() {
     const all = await TransactionAPI.getAll(dbId);
     allTransactions = all.filter(t => t.reviewed);
     filteredTransactions = [...allTransactions];
+    maxAmount = allTransactions.length > 0
+      ? Math.ceil(Math.max(...allTransactions.map(t => Math.abs(t.amount))))
+      : 1000;
   } catch (error) {
     console.error('Failed to load transactions:', error);
     Notification.error('Failed to load transactions');
@@ -84,12 +88,72 @@ async function renderFilters() {
         ${categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
       </select>
     </div>
+    <div class="table-filter">
+      <label class="form-label">Start Date</label>
+      <input type="date" id="date-start" class="form-input">
+    </div>
+    <div class="table-filter">
+      <label class="form-label">End Date</label>
+      <input type="date" id="date-end" class="form-input">
+    </div>
+    <div class="table-filter amount-filter">
+      <label class="form-label">Amount: <span id="amount-range-label">${formatCurrency(0)} – ${formatCurrency(maxAmount)}</span></label>
+      <div class="range-slider-wrapper">
+        <div class="range-track">
+          <div class="range-fill" id="range-fill"></div>
+        </div>
+        <input type="range" id="amount-min" class="range-input range-min" min="0" max="${maxAmount}" value="0" step="1">
+        <input type="range" id="amount-max" class="range-input range-max" min="0" max="${maxAmount}" value="${maxAmount}" step="1">
+      </div>
+      <div class="range-labels">
+        <span>${formatCurrency(0)}</span>
+        <span>${formatCurrency(maxAmount)}</span>
+      </div>
+    </div>
   `;
 
   document.getElementById('filters').innerHTML = filtersHTML;
 
-  // Add event listeners
+  // Category filter listener
   document.getElementById('category-filter').addEventListener('change', filterTransactions);
+
+  // Date filter listeners
+  document.getElementById('date-start').addEventListener('change', filterTransactions);
+  document.getElementById('date-end').addEventListener('change', filterTransactions);
+
+  // Amount range slider listeners
+  const amountMin = document.getElementById('amount-min');
+  const amountMax = document.getElementById('amount-max');
+
+  function updateRangeFill() {
+    const minVal = parseFloat(amountMin.value);
+    const maxVal = parseFloat(amountMax.value);
+    const pctMin = (minVal / maxAmount) * 100;
+    const pctMax = (maxVal / maxAmount) * 100;
+    document.getElementById('range-fill').style.left = pctMin + '%';
+    document.getElementById('range-fill').style.width = (pctMax - pctMin) + '%';
+    document.getElementById('amount-range-label').textContent =
+      `${formatCurrency(minVal)} – ${formatCurrency(maxVal)}`;
+    // Give min thumb higher z-index when at the top to stay grabbable
+    amountMin.style.zIndex = minVal >= maxAmount - 1 ? 4 : 3;
+    filterTransactions();
+  }
+
+  amountMin.addEventListener('input', () => {
+    if (parseFloat(amountMin.value) > parseFloat(amountMax.value)) {
+      amountMin.value = amountMax.value;
+    }
+    updateRangeFill();
+  });
+
+  amountMax.addEventListener('input', () => {
+    if (parseFloat(amountMax.value) < parseFloat(amountMin.value)) {
+      amountMax.value = amountMin.value;
+    }
+    updateRangeFill();
+  });
+
+  updateRangeFill();
 }
 
 /**
@@ -98,6 +162,13 @@ async function renderFilters() {
 function filterTransactions() {
   const searchTerm = document.getElementById('search-input').value.toLowerCase();
   const categoryFilter = document.getElementById('category-filter').value;
+  const amountMinEl = document.getElementById('amount-min');
+  const amountMaxEl = document.getElementById('amount-max');
+  const minAmt = amountMinEl ? parseFloat(amountMinEl.value) : 0;
+  const maxAmt = amountMaxEl ? parseFloat(amountMaxEl.value) : Infinity;
+
+  const dateStart = document.getElementById('date-start')?.value || '';
+  const dateEnd = document.getElementById('date-end')?.value || '';
 
   filteredTransactions = allTransactions.filter(t => {
     // Search filter
@@ -111,7 +182,15 @@ function filterTransactions() {
       matchesCategory = t.categoryId === categoryFilter;
     }
 
-    return matchesSearch && matchesCategory;
+    // Amount filter (by absolute value)
+    const absAmount = Math.abs(t.amount);
+    const matchesAmount = absAmount >= minAmt && absAmount <= maxAmt;
+
+    // Date filter (YYYY-MM-DD string comparison works correctly)
+    const matchesDate = (!dateStart || t.date >= dateStart) &&
+                        (!dateEnd   || t.date <= dateEnd);
+
+    return matchesSearch && matchesCategory && matchesAmount && matchesDate;
   });
 
   currentPage = 1;
