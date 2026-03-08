@@ -428,17 +428,85 @@ function generateCategoriesModalContent(categories) {
       </div>
       <div class="form-group">
         <label for="category-emoji" class="form-label">Emoji (optional)</label>
-        <input type="text" id="category-emoji" name="emoji" class="form-input" placeholder="🍔" maxlength="2">
+        <div style="position: relative;">
+          <div style="display: flex; gap: var(--spacing-sm);">
+            <input type="text" id="category-emoji" name="emoji" class="form-input" placeholder="" maxlength="2" style="flex: 1;" readonly>
+            <button type="button" class="btn btn-secondary" onclick="toggleEmojiPicker()" style="white-space: nowrap;">Pick Emoji</button>
+            <button type="button" class="btn btn-secondary" onclick="clearEmoji()" style="white-space: nowrap;">Clear</button>
+          </div>
+          <div id="emoji-picker" style="display: none; position: absolute; top: calc(100% + 4px); left: 0; z-index: 1000; background: white; border: 1px solid var(--gray-200); border-radius: var(--radius-md); padding: var(--spacing-sm); width: 300px; max-height: 220px; overflow-y: auto; box-shadow: var(--shadow-lg);">
+            ${[
+              { label: 'Food & Drink', emojis: ['🍔','🍕','🍜','🍣','🌮','🥗','☕','🍺','🍷','🥤','🍰','🛒'] },
+              { label: 'Transport',   emojis: ['🚗','🚌','✈️','🚂','🚕','🛵','🚲','⛽','🅿️','🛳️'] },
+              { label: 'Shopping',    emojis: ['🛍️','👗','👟','💄','🎮','📱','💻','📷','🎁','💍'] },
+              { label: 'Home',        emojis: ['🏠','🔧','💡','📦','🧹','🪴','🛋️','🔑','🪣'] },
+              { label: 'Health',      emojis: ['💊','🏥','🏋️','🧴','🩺','🦷','🧘','🩹'] },
+              { label: 'Entertainment', emojis: ['🎬','🎵','🎮','📚','🎭','🎨','🎯','🎪','🎤'] },
+              { label: 'Finance',     emojis: ['💰','💳','💵','📈','🏦','💹','🧾','📊','🪙'] },
+              { label: 'Utilities',   emojis: ['📱','🌐','🔌','📡','💧','🔥','♻️'] },
+              { label: 'People',      emojis: ['👤','👨‍👩‍👧','🧑‍💼','👶','🐶','🐱'] },
+              { label: 'Other',       emojis: ['⭐','✅','❗','🔴','🟢','🔵','⚡','🎯','📝','🗓️'] },
+            ].map(section => `
+              <div style="margin-bottom: var(--spacing-sm);">
+                <div style="font-size: var(--font-size-xs); color: var(--gray-500); margin-bottom: 2px; font-weight: var(--font-weight-medium);">${section.label}</div>
+                <div style="display: flex; flex-wrap: wrap; gap: 1px;">
+                  ${section.emojis.map(e => `<button type="button" title="${e}" onclick="selectEmoji('${e}')" style="background: none; border: none; font-size: 20px; cursor: pointer; padding: 3px 5px; border-radius: var(--radius-sm);" onmouseover="this.style.background='var(--gray-100)'" onmouseout="this.style.background='none'">${e}</button>`).join('')}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
       </div>
     </form>
   `;
 }
 
 /**
+ * Toggle emoji picker visibility
+ */
+window.toggleEmojiPicker = function() {
+  const picker = document.getElementById('emoji-picker');
+  if (!picker) return;
+  picker.style.display = picker.style.display === 'none' ? 'block' : 'none';
+};
+
+/**
+ * Select an emoji from the picker
+ */
+window.selectEmoji = function(emoji) {
+  const input = document.getElementById('category-emoji');
+  if (input) input.value = emoji;
+  const picker = document.getElementById('emoji-picker');
+  if (picker) picker.style.display = 'none';
+};
+
+/**
+ * Clear the emoji input
+ */
+window.clearEmoji = function() {
+  const input = document.getElementById('category-emoji');
+  if (input) input.value = '';
+};
+
+/**
  * Setup color picker synchronization
  */
+let emojiPickerListenerAdded = false;
+
 function setupColorSync() {
   setTimeout(() => {
+    // Close emoji picker when clicking outside (register once)
+    if (!emojiPickerListenerAdded) {
+      emojiPickerListenerAdded = true;
+      document.addEventListener('click', (e) => {
+        const picker = document.getElementById('emoji-picker');
+        if (!picker) return;
+        if (!picker.contains(e.target) && !e.target.closest('[onclick="toggleEmojiPicker()"]')) {
+          picker.style.display = 'none';
+        }
+      }, { capture: true, passive: true });
+    }
+
     const colorInput = document.getElementById('category-color');
     const colorHexInput = document.getElementById('category-color-hex');
 
