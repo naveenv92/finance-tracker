@@ -71,6 +71,7 @@ type Transaction struct {
 	Reviewed         bool      `json:"reviewed"`
 	ImportedAt       time.Time `json:"importedAt"`
 	Notes            string    `json:"notes,omitempty"`
+	Source           string    `json:"source,omitempty"` // Name of the template used to import
 }
 
 // InitDB initializes the SQLite database and creates tables
@@ -111,6 +112,7 @@ func InitDB() error {
 		reviewed BOOLEAN NOT NULL DEFAULT 0,
 		imported_at DATETIME NOT NULL,
 		notes TEXT,
+		source TEXT,
 		FOREIGN KEY (database_id) REFERENCES databases(id) ON DELETE CASCADE
 	);
 
@@ -132,6 +134,7 @@ func InitDB() error {
 		merchant_column TEXT NOT NULL,
 		amount_column TEXT NOT NULL,
 		date_format TEXT NOT NULL,
+		debit_sign TEXT NOT NULL DEFAULT 'positive',
 		created_at DATETIME NOT NULL,
 		FOREIGN KEY (database_id) REFERENCES databases(id) ON DELETE CASCADE
 	);
@@ -384,6 +387,7 @@ type Template struct {
 	MerchantColumn string    `json:"merchantColumn"`
 	AmountColumn   string    `json:"amountColumn"`
 	DateFormat     string    `json:"dateFormat"`
+	DebitSign      string    `json:"debitSign"` // "negative" or "positive"
 	CreatedAt      time.Time `json:"createdAt"`
 }
 
@@ -393,9 +397,13 @@ func CreateTemplate(databaseID string, template *Template) (*Template, error) {
 	template.DatabaseID = databaseID
 	template.CreatedAt = time.Now()
 
+	if template.DebitSign == "" {
+		template.DebitSign = "positive"
+	}
+
 	query := `
-		INSERT INTO templates (id, database_id, name, date_column, merchant_column, amount_column, date_format, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO templates (id, database_id, name, date_column, merchant_column, amount_column, date_format, debit_sign, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	_, err := db.Exec(query,
@@ -406,6 +414,7 @@ func CreateTemplate(databaseID string, template *Template) (*Template, error) {
 		template.MerchantColumn,
 		template.AmountColumn,
 		template.DateFormat,
+		template.DebitSign,
 		template.CreatedAt,
 	)
 	if err != nil {
@@ -419,7 +428,7 @@ func CreateTemplate(databaseID string, template *Template) (*Template, error) {
 // GetTemplates retrieves all templates for a database
 func GetTemplates(databaseID string) ([]*Template, error) {
 	query := `
-		SELECT id, database_id, name, date_column, merchant_column, amount_column, date_format, created_at
+		SELECT id, database_id, name, date_column, merchant_column, amount_column, date_format, debit_sign, created_at
 		FROM templates
 		WHERE database_id = ?
 		ORDER BY created_at ASC
@@ -434,7 +443,7 @@ func GetTemplates(databaseID string) ([]*Template, error) {
 	templates := make([]*Template, 0)
 	for rows.Next() {
 		var t Template
-		if err := rows.Scan(&t.ID, &t.DatabaseID, &t.Name, &t.DateColumn, &t.MerchantColumn, &t.AmountColumn, &t.DateFormat, &t.CreatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.DatabaseID, &t.Name, &t.DateColumn, &t.MerchantColumn, &t.AmountColumn, &t.DateFormat, &t.DebitSign, &t.CreatedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan template: %w", err)
 		}
 		templates = append(templates, &t)
@@ -450,14 +459,14 @@ func GetTemplates(databaseID string) ([]*Template, error) {
 // GetTemplate retrieves a template by ID
 func GetTemplate(databaseID, templateID string) (*Template, error) {
 	query := `
-		SELECT id, database_id, name, date_column, merchant_column, amount_column, date_format, created_at
+		SELECT id, database_id, name, date_column, merchant_column, amount_column, date_format, debit_sign, created_at
 		FROM templates
 		WHERE id = ? AND database_id = ?
 	`
 
 	var t Template
 	err := db.QueryRow(query, templateID, databaseID).Scan(
-		&t.ID, &t.DatabaseID, &t.Name, &t.DateColumn, &t.MerchantColumn, &t.AmountColumn, &t.DateFormat, &t.CreatedAt,
+		&t.ID, &t.DatabaseID, &t.Name, &t.DateColumn, &t.MerchantColumn, &t.AmountColumn, &t.DateFormat, &t.DebitSign, &t.CreatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("template not found")
@@ -500,8 +509,8 @@ func CreateTransaction(databaseID string, transaction *Transaction) (*Transactio
 	transaction.ImportedAt = time.Now()
 
 	query := `
-		INSERT INTO transactions (id, database_id, date, merchant, original_merchant, amount, category_id, splits, reviewed, imported_at, notes)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO transactions (id, database_id, date, merchant, original_merchant, amount, category_id, splits, reviewed, imported_at, notes, source)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	_, err := db.Exec(query,
@@ -516,6 +525,7 @@ func CreateTransaction(databaseID string, transaction *Transaction) (*Transactio
 		transaction.Reviewed,
 		transaction.ImportedAt,
 		transaction.Notes,
+		transaction.Source,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create transaction: %w", err)
@@ -530,7 +540,7 @@ func CreateTransaction(databaseID string, transaction *Transaction) (*Transactio
 // GetTransactions retrieves all transactions for a database
 func GetTransactions(databaseID string) ([]*Transaction, error) {
 	query := `
-		SELECT id, database_id, date, merchant, original_merchant, amount, category_id, splits, reviewed, imported_at, notes
+		SELECT id, database_id, date, merchant, original_merchant, amount, category_id, splits, reviewed, imported_at, notes, source
 		FROM transactions
 		WHERE database_id = ?
 		ORDER BY date DESC, imported_at DESC
@@ -548,6 +558,7 @@ func GetTransactions(databaseID string) ([]*Transaction, error) {
 		var categoryID sql.NullString
 		var splits sql.NullString
 		var notes sql.NullString
+		var source sql.NullString
 
 		if err := rows.Scan(
 			&t.ID,
@@ -561,6 +572,7 @@ func GetTransactions(databaseID string) ([]*Transaction, error) {
 			&t.Reviewed,
 			&t.ImportedAt,
 			&notes,
+			&source,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan transaction: %w", err)
 		}
@@ -573,6 +585,9 @@ func GetTransactions(databaseID string) ([]*Transaction, error) {
 		}
 		if notes.Valid {
 			t.Notes = notes.String
+		}
+		if source.Valid {
+			t.Source = source.String
 		}
 
 		transactions = append(transactions, &t)
@@ -588,7 +603,7 @@ func GetTransactions(databaseID string) ([]*Transaction, error) {
 // GetTransaction retrieves a transaction by ID
 func GetTransaction(databaseID, transactionID string) (*Transaction, error) {
 	query := `
-		SELECT id, database_id, date, merchant, original_merchant, amount, category_id, splits, reviewed, imported_at, notes
+		SELECT id, database_id, date, merchant, original_merchant, amount, category_id, splits, reviewed, imported_at, notes, source
 		FROM transactions
 		WHERE id = ? AND database_id = ?
 	`
@@ -597,6 +612,7 @@ func GetTransaction(databaseID, transactionID string) (*Transaction, error) {
 	var categoryID sql.NullString
 	var splits sql.NullString
 	var notes sql.NullString
+	var source sql.NullString
 
 	err := db.QueryRow(query, transactionID, databaseID).Scan(
 		&t.ID,
@@ -610,6 +626,7 @@ func GetTransaction(databaseID, transactionID string) (*Transaction, error) {
 		&t.Reviewed,
 		&t.ImportedAt,
 		&notes,
+		&source,
 	)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("transaction not found")
@@ -626,6 +643,9 @@ func GetTransaction(databaseID, transactionID string) (*Transaction, error) {
 	}
 	if notes.Valid {
 		t.Notes = notes.String
+	}
+	if source.Valid {
+		t.Source = source.String
 	}
 
 	return &t, nil

@@ -139,6 +139,31 @@ Backend: Added `Category` struct, `CreateCategory()`/`GetCategories()`/`DeleteCa
 
 **Result**: All localStorage usage for application data is eliminated. The only remaining localStorage key is `financeTracker:activeDb` (the active database ID, used as a lightweight session pointer — the full database object is always fetched from the backend).
 
+### Feature: Delete Transaction from Review Page (2026-03-07) ✅
+
+Added a "Delete" button to the review card (bottom-left, styled `btn-danger`). Clicking it confirms via `confirm()`, calls `TransactionAPI.delete()`, removes the transaction from the local array, and re-renders. Handles edge case where deleted transaction was the last one (shows "All Caught Up!" message).
+
+### Feature: View Transactions Shows Only Reviewed Transactions (2026-03-07) ✅
+
+`transactions.js` now filters `allTransactions` to only include `reviewed === true` after fetching. The "Status" filter dropdown was removed since it is no longer relevant. Page description updated to clarify only reviewed transactions are shown.
+
+### Feature: Template Debit Sign (2026-03-07) ✅
+
+Templates now store a `debitSign` field (`"positive"` or `"negative"`, default `"positive"`). During CSV import, if `debitSign === "negative"` all parsed amounts are multiplied by `-1`. The template creation form includes radio buttons to select the convention. Existing templates list shows the debit sign alongside column names.
+
+**Changes**:
+- **`database.go`**: Added `DebitSign string` to `Template` struct; added `debit_sign TEXT NOT NULL DEFAULT 'positive'` column to the `templates` schema; updated `CreateTemplate`, `GetTemplates`, `GetTemplate` to include the field
+- **`dashboard.js`**: Radio buttons added to template form; import logic applies `* -1` when `debitSign === 'negative'`
+
+### Feature: Transaction Source Field (2026-03-07) ✅
+
+Transactions now store a `source` field set to the name of the CSV template used during import. Displayed as a "Source" column on the View Transactions page (shows `—` if absent).
+
+**Changes**:
+- **`database.go`**: Added `Source string` to `Transaction` struct; added `source TEXT` column to the `transactions` schema; updated `CreateTransaction`, `GetTransactions`, `GetTransaction` to include the field
+- **`dashboard.js`**: Sets `source: template.name` on each transaction during CSV import
+- **`transactions.js`**: Added "Source" column to the transactions table
+
 ## Key Architecture Decisions
 
 ### Data Storage
@@ -387,7 +412,8 @@ go build -o finance-tracker
   splits: [{ personName: "John", amount: -2.88 }],
   reviewed: false,
   importedAt: "ISO timestamp",
-  notes: ""
+  notes: "",
+  source: "Chase Sapphire"  // name of the CSV template used to import
 }
 ```
 
@@ -411,6 +437,7 @@ go build -o finance-tracker
   merchantColumn: "Description",
   amountColumn: "Amount",
   dateFormat: "MM/DD/YYYY",
+  debitSign: "positive",  // "positive" or "negative" — whether debits appear as positive or negative in the CSV
   createdAt: "ISO timestamp"
 }
 ```
@@ -433,6 +460,7 @@ go build -o finance-tracker
    - Merchant Column: "Description"
    - Amount Column: "Amount"
    - Format: MM/DD/YYYY
+   - Debit Sign: Debits are positive (default)
 4. **Create categories**: Dashboard → Manage Categories
    - Name: "Food", Color: #FF6B6B, Emoji: 🍔
    - Name: "Transport", Color: #4A90E2, Emoji: 🚗
@@ -469,14 +497,14 @@ go build -o finance-tracker
    - Enter person name and amount/percentage
    - Switch between types with auto-conversion
    - Add multiple people with "Add Person" button
-6. User clicks "Save & Next" (marks reviewed) or "Skip"
+6. User clicks "Save & Next" (marks reviewed), "Skip", or "Delete" (removes transaction entirely)
 7. System advances to next unreviewed transaction
 8. When complete, shows "All caught up!" message
 
 ### Transaction Table Flow
 1. User navigates to Transactions page
-2. System displays all transactions in sortable table
-3. User can search by merchant, filter by category/status
+2. System displays only **reviewed** transactions in sortable table
+3. User can search by merchant, filter by category
 4. User clicks row to open edit modal
 5. User can edit details and save changes
 
@@ -588,6 +616,7 @@ if (!AppState.requireActiveDatabase()) {
 ### High Priority
 - [ ] Export to CSV functionality
 - [ ] Bulk transaction editing
+- [x] Transaction deletion from review page ✅
 - [ ] Transaction deletion from table view
 - [ ] Date range filtering
 - [ ] Amount range filtering
@@ -652,7 +681,7 @@ if (!AppState.requireActiveDatabase()) {
 - [x] View transactions table
 - [x] Search transactions
 - [x] Filter by category
-- [x] Filter by review status
+- [x] Only reviewed transactions shown in table (filter by review status removed)
 - [x] Sort table columns
 - [x] Edit transaction from table
 - [x] Pagination works
@@ -774,7 +803,7 @@ This project prioritizes:
 
 ---
 
-**Last Updated**: 2026-03-06 (Full backend migration: templates + transactions + import endpoint; review.js and dashboard.js fully migrated to SQLite; localStorage now only holds the active DB session pointer)
+**Last Updated**: 2026-03-07 (Delete from review; reviewed-only transactions view; template debit sign; transaction source field)
 **Status**: ✅ Frontend complete | ✅ Backend complete (all data in SQLite)
 
 **Current State**:
@@ -784,23 +813,31 @@ This project prioritizes:
 - ✅ Embedded static files (single binary distribution)
 - ✅ Database CRUD operations via API
 - ✅ Category CRUD operations via API
-- ✅ Transaction CRUD operations via API (including bulk import)
+- ✅ Transaction CRUD operations via API (including bulk import and delete)
 - ✅ Template CRUD operations via API
 - ✅ Async state management for API integration
 - ✅ All 4 pages fully migrated to backend (no localStorage for data)
 - ✅ Split transactions by dollar amount or percentage (0-100%)
 - ✅ Modal component supports async handlers and stays open
 - ✅ Consistent form styling across all split inputs
+- ✅ Delete transactions from review page
+- ✅ View Transactions shows only reviewed transactions
+- ✅ Template debit sign (`positive`/`negative`) controls amount sign during import
+- ✅ Transaction `source` field stores the template name used during import
 
 **Working User Flow**:
 1. Create database → Saved to SQLite ✅
 2. Open database → Dashboard loads successfully ✅
 3. Create categories → Saved to SQLite ✅
 4. Create templates → Saved to SQLite ✅
+   - Select debit sign convention (positive or negative) ✅
 5. Import CSV → Transactions bulk-imported to SQLite ✅
-6. View transactions → Loads from SQLite ✅
+   - Amounts sign-adjusted per template debit sign ✅
+   - Source set to template name ✅
+6. View transactions → Loads reviewed transactions from SQLite ✅
    - Search by merchant ✅
-   - Filter by category/status ✅
+   - Filter by category ✅
+   - Source column shown ✅
    - Click to edit in modal ✅
 7. Edit transaction → Updates in SQLite ✅
    - Edit merchant name ✅
@@ -811,6 +848,7 @@ This project prioritizes:
    - Assign categories from dropdown ✅
    - Split by dollar or percentage ✅
    - Auto-convert between split types ✅
+   - Delete transaction entirely ✅
 
 **Next Recommended Work**:
 1. Add authentication for multi-user support

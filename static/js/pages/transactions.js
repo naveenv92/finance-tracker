@@ -41,7 +41,8 @@ async function init() {
 async function loadTransactions() {
   const dbId = AppState.getActiveDatabaseId();
   try {
-    allTransactions = await TransactionAPI.getAll(dbId);
+    const all = await TransactionAPI.getAll(dbId);
+    allTransactions = all.filter(t => t.reviewed);
     filteredTransactions = [...allTransactions];
   } catch (error) {
     console.error('Failed to load transactions:', error);
@@ -83,21 +84,12 @@ async function renderFilters() {
         ${categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
       </select>
     </div>
-    <div class="table-filter">
-      <label for="reviewed-filter" class="form-label">Status</label>
-      <select id="reviewed-filter" class="form-select">
-        <option value="">All</option>
-        <option value="reviewed">Reviewed</option>
-        <option value="unreviewed">Unreviewed</option>
-      </select>
-    </div>
   `;
 
   document.getElementById('filters').innerHTML = filtersHTML;
 
   // Add event listeners
   document.getElementById('category-filter').addEventListener('change', filterTransactions);
-  document.getElementById('reviewed-filter').addEventListener('change', filterTransactions);
 }
 
 /**
@@ -106,7 +98,6 @@ async function renderFilters() {
 function filterTransactions() {
   const searchTerm = document.getElementById('search-input').value.toLowerCase();
   const categoryFilter = document.getElementById('category-filter').value;
-  const reviewedFilter = document.getElementById('reviewed-filter').value;
 
   filteredTransactions = allTransactions.filter(t => {
     // Search filter
@@ -120,15 +111,7 @@ function filterTransactions() {
       matchesCategory = t.categoryId === categoryFilter;
     }
 
-    // Reviewed filter
-    let matchesReviewed = true;
-    if (reviewedFilter === 'reviewed') {
-      matchesReviewed = t.reviewed;
-    } else if (reviewedFilter === 'unreviewed') {
-      matchesReviewed = !t.reviewed;
-    }
-
-    return matchesSearch && matchesCategory && matchesReviewed;
+    return matchesSearch && matchesCategory;
   });
 
   currentPage = 1;
@@ -188,6 +171,11 @@ async function renderTable() {
         if (!category) return '<span class="badge status-badge">Unknown</span>';
         return `<span class="category-badge" style="background-color: ${category.color};">${category.emoji || ''} ${category.name}</span>`;
       }
+    },
+    {
+      key: 'source',
+      label: 'Source',
+      render: (source) => `<span class="table-cell-source">${source || '—'}</span>`
     },
     {
       key: 'splits',

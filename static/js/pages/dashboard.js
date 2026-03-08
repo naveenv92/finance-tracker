@@ -216,16 +216,22 @@ window.showImportCSVModal = async function() {
         }
 
         // Convert rows to transactions
-        const transactions = rows.map(row => ({
-          date: DateFormatter.standardize(CSVParser.getValue(row, template.dateColumn), template.dateFormat),
-          merchant: cleanMerchantName(CSVParser.getValue(row, template.merchantColumn)),
-          originalMerchant: CSVParser.getValue(row, template.merchantColumn),
-          amount: parseFloat(CSVParser.getValue(row, template.amountColumn).replace(/[,$]/g, '')),
-          categoryId: null,
-          splits: '[]',
-          reviewed: false,
-          notes: ''
-        }));
+        const debitSign = template.debitSign || 'positive';
+        const transactions = rows.map(row => {
+          const rawAmount = parseFloat(CSVParser.getValue(row, template.amountColumn).replace(/[,$]/g, ''));
+          const amount = debitSign === 'negative' ? rawAmount * -1 : rawAmount;
+          return {
+            date: DateFormatter.standardize(CSVParser.getValue(row, template.dateColumn), template.dateFormat),
+            merchant: cleanMerchantName(CSVParser.getValue(row, template.merchantColumn)),
+            originalMerchant: CSVParser.getValue(row, template.merchantColumn),
+            amount,
+            categoryId: null,
+            splits: '[]',
+            reviewed: false,
+            notes: '',
+            source: template.name
+          };
+        });
 
         try {
           await TransactionAPI.importMany(dbId, transactions);
@@ -306,7 +312,7 @@ function generateTemplatesModalContent(templates) {
               <div>
                 <div style="font-weight: var(--font-weight-medium);">${t.name}</div>
                 <div style="font-size: var(--font-size-xs); color: var(--gray-500);">
-                  Date: ${t.dateColumn}, Merchant: ${t.merchantColumn}, Amount: ${t.amountColumn}
+                  Date: ${t.dateColumn}, Merchant: ${t.merchantColumn}, Amount: ${t.amountColumn} (debits are ${t.debitSign || 'negative'})
                 </div>
               </div>
               <button class="btn btn-danger btn-small" onclick="deleteTemplate('${t.id}')">Delete</button>
@@ -342,6 +348,19 @@ function generateTemplatesModalContent(templates) {
           <option value="YYYY-MM-DD">YYYY-MM-DD</option>
           <option value="M/D/YYYY">M/D/YYYY</option>
         </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label required">Debit Sign in CSV</label>
+        <div style="display: flex; flex-direction: column; gap: var(--spacing-xs); margin-top: var(--spacing-xs);">
+          <label style="display: flex; align-items: center; gap: var(--spacing-sm); cursor: pointer;">
+            <input type="radio" name="debitSign" value="negative">
+            Debits are negative (e.g., -5.75)
+          </label>
+          <label style="display: flex; align-items: center; gap: var(--spacing-sm); cursor: pointer;">
+            <input type="radio" name="debitSign" value="positive" checked>
+            Debits are positive (e.g., 5.75)
+          </label>
+        </div>
       </div>
     </form>
   `;

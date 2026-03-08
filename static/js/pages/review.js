@@ -163,6 +163,7 @@ function renderReviewForm() {
           <button class="btn btn-secondary" id="prev-btn" ${currentIndex === 0 ? 'disabled' : ''}>
             Previous
           </button>
+          <button class="btn btn-danger" id="delete-btn">Delete</button>
         </div>
         <div class="review-actions-right">
           <button class="btn btn-secondary" id="skip-btn">Skip</button>
@@ -248,6 +249,11 @@ function setupFormEventListeners() {
       goToPrevious();
     });
   }
+
+  // Delete transaction
+  document.getElementById('delete-btn').addEventListener('click', () => {
+    deleteTransaction();
+  });
 
   // Add split
   document.getElementById('add-split-btn').addEventListener('click', () => {
@@ -496,6 +502,34 @@ async function saveTransaction(andMoveNext) {
   } catch (error) {
     console.error('Error saving transaction:', error);
     Notification.error('Failed to save transaction');
+  }
+}
+
+/**
+ * Delete current transaction from the database
+ */
+async function deleteTransaction() {
+  const transaction = unreviewedTransactions[currentIndex];
+  const dbId = AppState.getActiveDatabaseId();
+
+  if (!confirm(`Delete "${transaction.merchant}"? This cannot be undone.`)) {
+    return;
+  }
+
+  try {
+    await TransactionAPI.delete(dbId, transaction.id);
+    unreviewedTransactions.splice(currentIndex, 1);
+    Notification.success('Transaction deleted');
+
+    // Keep index in bounds
+    if (currentIndex >= unreviewedTransactions.length) {
+      currentIndex = Math.max(0, unreviewedTransactions.length - 1);
+    }
+
+    renderReviewContent();
+  } catch (error) {
+    console.error('Error deleting transaction:', error);
+    Notification.error('Failed to delete transaction');
   }
 }
 
