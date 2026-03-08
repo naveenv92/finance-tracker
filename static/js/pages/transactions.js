@@ -23,7 +23,20 @@ let allTransactions = [];
 let filteredTransactions = [];
 let currentPage = 1;
 let maxAmount = 0;
+let nameFilter = '';
 const rowsPerPage = 50;
+
+/**
+ * Parse splits from a transaction (handles JSON string or array)
+ */
+function parseSplits(splits) {
+  if (!splits) return [];
+  if (Array.isArray(splits)) return splits;
+  if (typeof splits === 'string' && splits) {
+    try { return JSON.parse(splits); } catch { return []; }
+  }
+  return [];
+}
 
 /**
  * Initialize page
@@ -79,35 +92,53 @@ async function renderFilters() {
     console.error('Failed to load categories:', error);
   }
 
+  // Collect unique person names from all splits
+  const personNames = [...new Set(
+    allTransactions.flatMap(t => parseSplits(t.splits).map(s => s.personName))
+  )].sort();
+
   const filtersHTML = `
-    <div class="table-filter">
-      <label for="category-filter" class="form-label">Category</label>
-      <select id="category-filter" class="form-select">
-        <option value="">All Categories</option>
-        <option value="uncategorized">Uncategorized</option>
-        ${categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
-      </select>
-    </div>
-    <div class="table-filter">
-      <label class="form-label">Start Date</label>
-      <input type="date" id="date-start" class="form-input">
-    </div>
-    <div class="table-filter">
-      <label class="form-label">End Date</label>
-      <input type="date" id="date-end" class="form-input">
-    </div>
-    <div class="table-filter amount-filter">
-      <label class="form-label">Amount: <span id="amount-range-label">${formatCurrency(0)} – ${formatCurrency(maxAmount)}</span></label>
-      <div class="range-slider-wrapper">
-        <div class="range-track">
-          <div class="range-fill" id="range-fill"></div>
-        </div>
-        <input type="range" id="amount-min" class="range-input range-min" min="0" max="${maxAmount}" value="0" step="1">
-        <input type="range" id="amount-max" class="range-input range-max" min="0" max="${maxAmount}" value="${maxAmount}" step="1">
+    <div class="table-filters-row">
+      <div class="table-filter">
+        <label for="category-filter" class="form-label">Category</label>
+        <select id="category-filter" class="form-select">
+          <option value="">All Categories</option>
+          <option value="uncategorized">Uncategorized</option>
+          ${categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
+        </select>
       </div>
-      <div class="range-labels">
-        <span>${formatCurrency(0)}</span>
-        <span>${formatCurrency(maxAmount)}</span>
+      <div class="table-filter">
+        <label for="person-filter" class="form-label">Person</label>
+        <select id="person-filter" class="form-select">
+          <option value="">All People</option>
+          ${personNames.map(n => `<option value="${n}">${n}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="table-filters-row">
+      <div class="table-filter">
+        <label class="form-label">Start Date</label>
+        <input type="date" id="date-start" class="form-input">
+      </div>
+      <div class="table-filter">
+        <label class="form-label">End Date</label>
+        <input type="date" id="date-end" class="form-input">
+      </div>
+    </div>
+    <div class="table-filters-row">
+      <div class="table-filter amount-filter">
+        <label class="form-label">Amount: <span id="amount-range-label">${formatCurrency(0)} – ${formatCurrency(maxAmount)}</span></label>
+        <div class="range-slider-wrapper">
+          <div class="range-track">
+            <div class="range-fill" id="range-fill"></div>
+          </div>
+          <input type="range" id="amount-min" class="range-input range-min" min="0" max="${maxAmount}" value="0" step="1">
+          <input type="range" id="amount-max" class="range-input range-max" min="0" max="${maxAmount}" value="${maxAmount}" step="1">
+        </div>
+        <div class="range-labels">
+          <span>${formatCurrency(0)}</span>
+          <span>${formatCurrency(maxAmount)}</span>
+        </div>
       </div>
     </div>
   `;
@@ -116,6 +147,12 @@ async function renderFilters() {
 
   // Category filter listener
   document.getElementById('category-filter').addEventListener('change', filterTransactions);
+
+  // Person filter listener
+  document.getElementById('person-filter').addEventListener('change', (e) => {
+    nameFilter = e.target.value;
+    filterTransactions();
+  });
 
   // Date filter listeners
   document.getElementById('date-start').addEventListener('change', filterTransactions);
@@ -170,7 +207,7 @@ function filterTransactions() {
   const dateStart = document.getElementById('date-start')?.value || '';
   const dateEnd = document.getElementById('date-end')?.value || '';
 
-  filteredTransactions = allTransactions.filter(t => {
+  filteredTransactions = allTransactions.flatMap(t => {
     // Search filter
     const matchesSearch = !searchTerm || t.merchant.toLowerCase().includes(searchTerm);
 
@@ -182,15 +219,25 @@ function filterTransactions() {
       matchesCategory = t.categoryId === categoryFilter;
     }
 
-    // Amount filter (by absolute value)
-    const absAmount = Math.abs(t.amount);
-    const matchesAmount = absAmount >= minAmt && absAmount <= maxAmt;
-
     // Date filter (YYYY-MM-DD string comparison works correctly)
     const matchesDate = (!dateStart || t.date >= dateStart) &&
                         (!dateEnd   || t.date <= dateEnd);
 
-    return matchesSearch && matchesCategory && matchesAmount && matchesDate;
+    // Person filter — only include if this person has a split; use their split amount
+    let displayAmount = t.amount;
+    if (nameFilter) {
+      const split = parseSplits(t.splits).find(s => s.personName === nameFilter);
+      if (!split) return [];
+      displayAmount = split.amount;
+    }
+
+    // Amount filter (applied to the effective display amount)
+    const absAmount = Math.abs(displayAmount);
+    const matchesAmount = absAmount >= minAmt && absAmount <= maxAmt;
+
+    if (!matchesSearch || !matchesCategory || !matchesAmount || !matchesDate) return [];
+
+    return [{ ...t, _displayAmount: displayAmount }];
   });
 
   currentPage = 1;
@@ -234,9 +281,12 @@ async function renderTable() {
       label: 'Amount',
       sortable: true,
       align: 'right',
-      render: (amount) => {
-        const className = amount >= 0 ? 'positive' : 'negative';
-        return `<span class="table-cell-amount ${className}">${formatCurrency(amount)}</span>`;
+      render: (amount, row) => {
+        const effective = row._displayAmount ?? amount;
+        const className = effective >= 0 ? 'positive' : 'negative';
+        const isMultiSplit = parseSplits(row.splits).length > 1;
+        const suffix = row._displayAmount != null && isMultiSplit ? ' <span class="amount-split-indicator">(split)</span>' : '';
+        return `<span class="table-cell-amount ${className}">${formatCurrency(effective)}${suffix}</span>`;
       }
     },
     {

@@ -139,6 +139,12 @@ func InitDB() error {
 		FOREIGN KEY (database_id) REFERENCES databases(id) ON DELETE CASCADE
 	);
 
+	CREATE TABLE IF NOT EXISTS database_settings (
+		database_id TEXT PRIMARY KEY,
+		owner_name TEXT NOT NULL DEFAULT '',
+		FOREIGN KEY (database_id) REFERENCES databases(id) ON DELETE CASCADE
+	);
+
 	CREATE INDEX IF NOT EXISTS idx_transactions_database_id ON transactions(database_id);
 	CREATE INDEX IF NOT EXISTS idx_transactions_reviewed ON transactions(reviewed);
 	CREATE INDEX IF NOT EXISTS idx_categories_database_id ON categories(database_id);
@@ -688,6 +694,45 @@ func UpdateTransaction(databaseID string, transaction *Transaction) (*Transactio
 	UpdateDatabaseTimestamp(databaseID)
 
 	return transaction, nil
+}
+
+// ==================== Settings Operations ====================
+
+// DatabaseSettings holds per-database user settings
+type DatabaseSettings struct {
+	DatabaseID string `json:"databaseId,omitempty"`
+	OwnerName  string `json:"ownerName"`
+}
+
+// GetSettings retrieves settings for a database, returning defaults if none exist
+func GetSettings(databaseID string) (*DatabaseSettings, error) {
+	query := `SELECT database_id, owner_name FROM database_settings WHERE database_id = ?`
+
+	var s DatabaseSettings
+	err := db.QueryRow(query, databaseID).Scan(&s.DatabaseID, &s.OwnerName)
+	if err == sql.ErrNoRows {
+		// Return defaults if no settings row yet
+		return &DatabaseSettings{DatabaseID: databaseID, OwnerName: ""}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get settings: %w", err)
+	}
+	return &s, nil
+}
+
+// UpsertSettings creates or updates settings for a database
+func UpsertSettings(databaseID string, settings *DatabaseSettings) (*DatabaseSettings, error) {
+	query := `
+		INSERT INTO database_settings (database_id, owner_name)
+		VALUES (?, ?)
+		ON CONFLICT(database_id) DO UPDATE SET owner_name = excluded.owner_name
+	`
+	_, err := db.Exec(query, databaseID, settings.OwnerName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to upsert settings: %w", err)
+	}
+	settings.DatabaseID = databaseID
+	return settings, nil
 }
 
 // DeleteTransaction deletes a transaction

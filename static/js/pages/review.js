@@ -3,7 +3,7 @@
  */
 
 import { AppState } from '../core/state.js';
-import { TransactionAPI, CategoryAPI } from '../core/api.js';
+import { TransactionAPI, CategoryAPI, SettingsAPI } from '../core/api.js';
 import { Notification } from '../components/notification.js';
 import { DateFormatter } from '../utils/date-formatter.js';
 import { formatCurrency } from '../utils/helpers.js';
@@ -19,14 +19,35 @@ if (!AppState.requireActiveDatabase()) {
 let unreviewedTransactions = [];
 let currentIndex = 0;
 let categories = [];
+let ownerName = '';
 
 /**
  * Initialize page
  */
 async function init() {
-  await loadCategories();
+  await Promise.all([loadCategories(), loadSettings()]);
+
+  if (!ownerName) {
+    Notification.error('Please set your name in Database Settings before reviewing transactions.');
+    setTimeout(() => { window.location.href = 'settings.html'; }, 1500);
+    return;
+  }
+
   await loadUnreviewedTransactions();
   renderReviewContent();
+}
+
+/**
+ * Load settings to get owner name for pre-filling splits
+ */
+async function loadSettings() {
+  const dbId = AppState.getActiveDatabaseId();
+  try {
+    const settings = await SettingsAPI.get(dbId);
+    ownerName = settings.ownerName || '';
+  } catch (error) {
+    console.error('Error loading settings:', error);
+  }
 }
 
 /**
@@ -94,8 +115,12 @@ function renderCompleteMessage() {
  */
 function renderReviewForm() {
   const transaction = unreviewedTransactions[currentIndex];
-  // Parse splits if stored as JSON string
-  const splits = parseSplits(transaction.splits);
+  // Parse splits if stored as JSON string; default to owner's 100% split for new transactions
+  const saved = parseSplits(transaction.splits);
+  const isDefaultOwnerSplit = saved.length === 0 && !!ownerName;
+  const splits = isDefaultOwnerSplit
+    ? [{ personName: ownerName, amount: transaction.amount }]
+    : saved;
 
   const amountClass = transaction.amount >= 0 ? 'positive' : 'negative';
 
@@ -147,7 +172,7 @@ function renderReviewForm() {
             <button type="button" class="btn btn-secondary btn-small" id="add-split-btn">Add Person</button>
           </div>
           <div class="splits-list" id="splits-list">
-            ${renderSplitsList(splits, transaction.amount)}
+            ${renderSplitsList(splits, transaction.amount, isDefaultOwnerSplit)}
           </div>
           <div id="split-total" class="split-total"></div>
         </div>
@@ -193,32 +218,35 @@ function parseSplits(splits) {
 /**
  * Render splits list
  */
-function renderSplitsList(splits, transactionAmount) {
+function renderSplitsList(splits, transactionAmount, firstIsAuto = false) {
   if (!splits || splits.length === 0) {
     return '<p class="text-muted" id="no-splits-msg">No splits added. The full amount goes to one person.</p>';
   }
 
   return splits.map((split, index) => {
+    const isAuto = firstIsAuto && index === 0;
     // Calculate percentage from amount
     const percentage = transactionAmount !== 0 ? (Math.abs(split.amount) / Math.abs(transactionAmount)) * 100 : 0;
 
     return `
-      <div class="split-item" data-index="${index}">
+      <div class="split-item" data-index="${index}" ${isAuto ? 'data-auto="true"' : ''}>
         <div class="form-group">
           <label class="form-label">Person Name</label>
           <input type="text" class="split-name form-input" value="${split.personName}" placeholder="Name" required>
         </div>
+        ${isAuto ? '' : `
         <div class="form-group">
           <label class="form-label">Amount Type</label>
           <select class="split-type form-select" data-index="${index}">
-            <option value="amount" selected>Dollar Amount</option>
-            <option value="percentage">Percentage</option>
+            <option value="amount">Dollar Amount</option>
+            <option value="percentage" selected>Percentage</option>
           </select>
         </div>
+        `}
         <div class="form-group">
-          <label class="form-label split-amount-label">Amount ($)</label>
-          <input type="number" step="0.01" class="split-amount form-input" data-index="${index}" value="${Math.abs(split.amount)}" placeholder="0.00" required>
-          <input type="number" step="0.01" class="split-percentage form-input" data-index="${index}" value="${percentage.toFixed(2)}" placeholder="0.00" min="0" max="100" style="display: none;" required>
+          <label class="form-label split-amount-label">${isAuto ? 'Amount ($) <span class="split-auto-label">(auto)</span>' : 'Percentage (%)'}</label>
+          <input type="number" step="0.01" class="split-amount form-input" data-index="${index}" value="${Math.abs(split.amount)}" placeholder="0.00" ${isAuto ? 'readonly' : 'style="display: none;" required'}>
+          ${isAuto ? '' : `<input type="number" step="0.01" class="split-percentage form-input" data-index="${index}" value="${percentage.toFixed(2)}" placeholder="0.00" min="0" max="100" required>`}
         </div>
         <button type="button" class="btn btn-danger btn-small remove-split-btn" data-index="${index}">Remove</button>
       </div>
@@ -295,24 +323,26 @@ function addSplit(transactionAmount) {
 
   const currentSplits = splitsList.querySelectorAll('.split-item');
   const index = currentSplits.length;
+  const totalPeople = index + 1; // including the new split
+  const defaultPct = (100 / totalPeople).toFixed(2);
 
   const splitHTML = `
     <div class="split-item" data-index="${index}">
       <div class="form-group">
         <label class="form-label">Person Name</label>
-        <input type="text" class="split-name form-input" placeholder="Name" required>
+        <input type="text" class="split-name form-input" value="${index === 0 ? ownerName : ''}" placeholder="Name" required>
       </div>
       <div class="form-group">
         <label class="form-label">Amount Type</label>
         <select class="split-type form-select" data-index="${index}">
-          <option value="amount" selected>Dollar Amount</option>
-          <option value="percentage">Percentage</option>
+          <option value="amount">Dollar Amount</option>
+          <option value="percentage" selected>Percentage</option>
         </select>
       </div>
       <div class="form-group">
-        <label class="form-label split-amount-label">Amount ($)</label>
-        <input type="number" step="0.01" class="split-amount form-input" data-index="${index}" placeholder="0.00" required>
-        <input type="number" step="0.01" class="split-percentage form-input" data-index="${index}" placeholder="0.00" min="0" max="100" style="display: none;" required>
+        <label class="form-label split-amount-label">Percentage (%)</label>
+        <input type="number" step="0.01" class="split-amount form-input" data-index="${index}" placeholder="0.00" style="display: none;" required>
+        <input type="number" step="0.01" class="split-percentage form-input" data-index="${index}" value="${defaultPct}" placeholder="0.00" min="0" max="100" required>
       </div>
       <button type="button" class="btn btn-danger btn-small remove-split-btn" data-index="${index}">Remove</button>
     </div>
@@ -402,13 +432,15 @@ function getSplitsFromForm() {
     const percentageInput = item.querySelector('.split-percentage');
     const typeSelect = item.querySelector('.split-type');
 
-    if (!nameInput || !amountInput || !percentageInput || !typeSelect) continue;
+    if (!nameInput || !amountInput) continue;
 
     const name = nameInput.value.trim();
     let amount = 0;
 
-    // Get amount based on selected type
-    if (typeSelect.value === 'percentage') {
+    // Auto splits have no typeSelect — read dollar amount directly
+    if (!typeSelect) {
+      amount = parseFloat(amountInput.value);
+    } else if (typeSelect.value === 'percentage') {
       const percentage = parseFloat(percentageInput.value);
       if (isNaN(percentage) || percentage < 0 || percentage > 100) {
         return false;
@@ -434,9 +466,34 @@ function getSplitsFromForm() {
 }
 
 /**
+ * Recalculate the auto split's amount to be the remainder after all other splits
+ */
+function recalculateAutoSplit(transactionAmount) {
+  const autoItem = document.querySelector('.split-item[data-auto="true"]');
+  if (!autoItem) return;
+
+  let otherTotal = 0;
+  document.querySelectorAll('.split-item:not([data-auto="true"])').forEach(item => {
+    const typeSelect = item.querySelector('.split-type');
+    const amountInput = item.querySelector('.split-amount');
+    const percentageInput = item.querySelector('.split-percentage');
+    if (typeSelect && typeSelect.value === 'percentage') {
+      const pct = parseFloat(percentageInput?.value) || 0;
+      otherTotal += (pct / 100) * Math.abs(transactionAmount);
+    } else {
+      otherTotal += parseFloat(amountInput?.value) || 0;
+    }
+  });
+
+  const remainder = Math.max(0, Math.abs(transactionAmount) - otherTotal);
+  autoItem.querySelector('.split-amount').value = remainder.toFixed(2);
+}
+
+/**
  * Update split total display
  */
 function updateSplitTotal(transactionAmount) {
+  recalculateAutoSplit(transactionAmount);
   const splits = getSplitsFromForm();
   const totalEl = document.getElementById('split-total');
 

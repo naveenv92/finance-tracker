@@ -3,6 +3,12 @@
   /* Uses table.css styles */
 }
 
+.table-filters-row {
+  display: flex;
+  gap: var(--spacing-md);
+  width: 100%;
+}
+
 .search-bar {
   display: flex;
   align-items: center;
@@ -107,4 +113,10 @@
   font-size: var(--font-size-xs);
   color: var(--gray-600);
   margin-top: var(--spacing-xs);
+}
+
+.amount-split-indicator {
+  font-size: var(--font-size-xs);
+  color: var(--gray-500);
+  font-weight: var(--font-weight-normal);
 }

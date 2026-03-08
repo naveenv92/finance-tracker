@@ -171,6 +171,8 @@ func handleDatabaseRoutes(w http.ResponseWriter, r *http.Request) {
 			} else {
 				handleTemplateByID(w, r, dbID, parts[2])
 			}
+		case "settings":
+			handleSettings(w, r, dbID)
 		default:
 			http.Error(w, "Unknown resource", http.StatusNotFound)
 		}
@@ -400,6 +402,35 @@ func handleTemplates(w http.ResponseWriter, r *http.Request, dbID string) {
 
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(created)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// handleSettings handles GET and PUT for database settings
+func handleSettings(w http.ResponseWriter, r *http.Request, dbID string) {
+	switch r.Method {
+	case http.MethodGet:
+		settings, err := GetSettings(dbID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		json.NewEncoder(w).Encode(settings)
+
+	case http.MethodPut:
+		var settings DatabaseSettings
+		if err := json.NewDecoder(r.Body).Decode(&settings); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		updated, err := UpsertSettings(dbID, &settings)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		json.NewEncoder(w).Encode(updated)
 
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)

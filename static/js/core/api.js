@@ -138,6 +138,22 @@ export const CategoryAPI = {
 };
 
 /**
+ * Settings API methods
+ */
+export const SettingsAPI = {
+  async get(databaseId) {
+    return fetchAPI(`/databases/${databaseId}/settings`);
+  },
+
+  async update(databaseId, settings) {
+    return fetchAPI(`/databases/${databaseId}/settings`, {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    });
+  },
+};
+
+/**
  * Template API methods (placeholder for future implementation)
  */
 export const TemplateAPI = {

@@ -186,6 +186,62 @@ Transactions now store a `source` field set to the name of the CSV template used
 - **`dashboard.js`**: Sets `source: template.name` on each transaction during CSV import
 - **`transactions.js`**: Added "Source" column to the transactions table
 
+### Feature: Database Settings Page & Owner Name (2026-03-07) ✅
+
+Added a per-database Settings page accessible from the sidebar and from a "Database Settings" button on the dashboard header.
+
+**Changes**:
+- **`database.go`**: Added `database_settings` table (`database_id PK`, `owner_name TEXT`), `DatabaseSettings` struct, `GetSettings()` (returns empty defaults if no row), `UpsertSettings()` (INSERT ... ON CONFLICT DO UPDATE)
+- **`main.go`**: Added `"settings"` case in router → `handleSettings()` supporting `GET` and `PUT` at `/api/databases/:id/settings`
+- **`api.js`**: Added `SettingsAPI` with `get(dbId)` and `update(dbId, settings)`
+- **`static/settings.html`**: New settings page with sidebar nav
+- **`static/js/pages/settings.js`**: Loads and saves settings; shows db name in description
+- **`static/css/pages/settings.css`**: Layout styles and `.form-hint` helper class
+- **`dashboard.html`**: Added "Database Settings" button next to "Change Database" in header; added Settings link to sidebar
+- **`transactions.html`**, **`review.html`**: Added Settings link to sidebar nav
+
+### Feature: Review Page — Owner Name Pre-fill & Auto Split (2026-03-07) ✅
+
+The review page now enforces that a name is set in settings before reviewing, and automatically pre-fills a 100% split for the owner.
+
+**Changes**:
+- **`review.js`**:
+  - Loads settings alongside categories on init (`loadSettings()`)
+  - If `ownerName` is not set, shows error notification and redirects to settings page
+  - Default split for a new (unsaved) transaction is `[{ personName: ownerName, amount: transaction.amount }]` (100%)
+  - First split rendered with `data-auto="true"`: amount input is `readonly` and greyed out, amount type selector is hidden, label shows `(auto)`
+  - `recalculateAutoSplit(transactionAmount)`: sums all non-auto splits (respecting dollar/percentage type) and sets the auto split's amount to the remainder
+  - `updateSplitTotal` calls `recalculateAutoSplit` before reading values so the total is always accurate
+  - **Bug fix**: `getSplitsFromForm` previously skipped auto splits because the guard required `typeSelect` and `percentageInput` (which auto splits lack). Fixed by relaxing guard to only require `nameInput` and `amountInput`, then branching on `typeSelect` presence
+
+### Feature: Review Page — Percentage as Default Split Type (2026-03-07) ✅
+
+New splits added via "Add Person" now default to Percentage mode with `(100 / totalPeople)%` pre-filled. Existing saved splits also render in percentage mode when re-displayed.
+
+**Changes**:
+- **`review.js`**: `addSplit()` defaults to `<option value="percentage" selected>`, shows percentage input, hides dollar input, sets value to `(100 / (index + 1)).toFixed(2)`; `renderSplitsList()` for non-auto splits also defaults to percentage selected with dollar input hidden
+
+### Feature: View Transactions — Person Filter (2026-03-07) ✅
+
+Added a "Person" dropdown filter on the View Transactions page. Selecting a person shows only transactions where that person appears in splits, and displays their individual split amount instead of the full transaction amount.
+
+**Changes**:
+- **`transactions.js`**:
+  - Added module-level `parseSplits()` helper
+  - Added `nameFilter` module variable
+  - `renderFilters()` collects unique person names from all splits, renders a "Person" dropdown sorted alphabetically
+  - `filterTransactions()` uses `flatMap`: when `nameFilter` is active, excludes transactions where that person has no split and attaches `_displayAmount` (the person's split amount) to matching transactions; amount range filter applies to `_displayAmount`
+  - Amount column uses `row._displayAmount ?? amount`; shows `(split)` label only when `parseSplits(row.splits).length > 1`
+- **`transactions.css`**: Added `.amount-split-indicator` style; added `.table-filters-row` for grouped filter layout
+
+### Feature: View Transactions — Filter Bar Layout (2026-03-07) ✅
+
+Reorganised the filter bar into three rows: Category + Person on row 1, Start Date + End Date on row 2, Amount slider on row 3.
+
+**Changes**:
+- **`transactions.js`**: Wrapped filter groups in `.table-filters-row` divs
+- **`transactions.css`**: Added `.table-filters-row { display: flex; gap: ...; width: 100%; }`
+
 ## Key Architecture Decisions
 
 ### Data Storage
@@ -224,9 +280,9 @@ static/
 ```
 finance/
 ├── static/              # Frontend files (embedded in binary via embed.FS)
-│   ├── *.html          # 4 HTML pages
-│   ├── css/            # 10 CSS files
-│   └── js/             # 15 JavaScript modules
+│   ├── *.html          # 5 HTML pages
+│   ├── css/            # 11 CSS files
+│   └── js/             # 16 JavaScript modules
 ├── main.go             # HTTP server and routing
 ├── database.go         # SQLite operations
 ├── go.mod              # Go dependencies
@@ -242,13 +298,14 @@ finance/
 └── config/             # Configuration files (future)
 ```
 
-### HTML Pages (4 files in `static/`)
+### HTML Pages (5 files in `static/`)
 - `static/index.html` - Landing/database selection
 - `static/dashboard.html` - Main hub with stats and actions
 - `static/transactions.html` - Table view of all transactions
 - `static/review.html` - One-by-one review interface
+- `static/settings.html` - Database settings (owner name)
 
-### CSS Files (10 files in `static/css/`)
+### CSS Files (11 files in `static/css/`)
 - `static/css/reset.css` - CSS reset
 - `static/css/variables.css` - Design tokens
 - `static/css/global.css` - Global styles, layout, typography
@@ -259,8 +316,9 @@ finance/
 - `static/css/pages/dashboard.css` - Dashboard specific
 - `static/css/pages/transactions.css` - Transactions page specific
 - `static/css/pages/review.css` - Review page specific
+- `static/css/pages/settings.css` - Settings page specific
 
-### JavaScript Files (15 files in `static/js/`)
+### JavaScript Files (16 files in `static/js/`)
 
 **Core (4 files)**:
 - `static/js/core/storage.js` - localStorage CRUD with prefix management
@@ -279,11 +337,12 @@ finance/
 - `static/js/components/notification.js` - Toast notifications
 - `static/js/components/table.js` - Sortable data table
 
-**Pages (4 files)**:
+**Pages (5 files)**:
 - `static/js/pages/landing.js` - Database CRUD (fully migrated to backend API)
 - `static/js/pages/dashboard.js` - Stats, import, templates, categories (fully migrated to backend API)
 - `static/js/pages/transactions.js` - Transaction table with filters (fully migrated to backend API)
 - `static/js/pages/review.js` - Review workflow (fully migrated to backend API)
+- `static/js/pages/settings.js` - Database settings (owner name)
 
 **Documentation (2 files)**:
 - `README.md` - User-facing documentation
@@ -307,13 +366,14 @@ The backend is a simple HTTP server using Go's standard library:
 - **Logging**: Daily log files written to `~/.finance-tracker/logs/server-YYYY-MM-DD.log`
 
 ### Database Schema
-SQLite database with 4 tables:
+SQLite database with 5 tables:
 - `databases` - Finance database metadata
 - `transactions` - Transaction records (foreign key to databases)
 - `categories` - Category definitions (foreign key to databases)
 - `templates` - CSV import templates (foreign key to databases)
+- `database_settings` - Per-database user settings; `database_id` is the PK (foreign key to databases, cascade delete)
 
-All tables use UUID primary keys and cascade deletes for referential integrity.
+All tables use UUID primary keys (except `database_settings` which uses `database_id` as PK) and cascade deletes for referential integrity.
 
 ### API Endpoints Implemented
 
@@ -339,6 +399,10 @@ All tables use UUID primary keys and cascade deletes for referential integrity.
 - ✅ `GET /api/databases/:id/templates` - List all templates for a database
 - ✅ `POST /api/databases/:id/templates` - Create new template
 - ✅ `DELETE /api/databases/:id/templates/:templateId` - Delete template
+
+**Settings:**
+- ✅ `GET /api/databases/:id/settings` - Get database settings (returns defaults if not yet set)
+- ✅ `PUT /api/databases/:id/settings` - Create or update database settings
 
 ### Running the Backend
 ```bash
@@ -386,15 +450,26 @@ go build -o finance-tracker
   - ✅ Category loading: `GET /api/databases/:id/categories`
   - ✅ All transaction operations use backend API
   - ✅ Splits stored as JSON string in database
+  - ✅ Person filter dropdown (names extracted from all splits)
+  - ✅ Person filter shows individual split amount; `(split)` label only when >1 person
+  - ✅ Filter bar in 3 rows: Category+Person, Start+End Date, Amount slider
 
 - **Review page** (`static/js/pages/review.js`):
   - ✅ Transaction loading: `GET /api/databases/:id/transactions` (filtered by `!reviewed`)
   - ✅ Transaction saving: `PUT /api/databases/:id/transactions/:transactionId`
   - ✅ Category loading: `GET /api/databases/:id/categories`
-  - ✅ Categories populate dropdown for transaction categorization
+  - ✅ Settings loading: `GET /api/databases/:id/settings` (for ownerName)
+  - ✅ Redirects to settings page if `ownerName` not set
+  - ✅ Default split pre-filled with owner's name at 100% (auto-calculated)
+  - ✅ Auto split recalculates live as other splits are added/changed
+  - ✅ New splits default to Percentage type, pre-filled with `100 / totalPeople`%
   - ✅ Split by dollar amount or percentage with auto-conversion
-  - ✅ Amount type selector for each split (Dollar Amount / Percentage)
   - ✅ Splits serialized as JSON string before sending to backend
+
+- **Settings page** (`static/js/pages/settings.js`):
+  - ✅ Settings loading: `GET /api/databases/:id/settings`
+  - ✅ Settings saving: `PUT /api/databases/:id/settings`
+  - ✅ Shows database name in page description
 
 - **State Management** (`static/js/core/state.js`):
   - ✅ `setActiveDatabase()` - async, verifies via backend API
@@ -464,6 +539,14 @@ go build -o finance-tracker
 }
 ```
 
+### DatabaseSettings
+```javascript
+{
+  databaseId: "uuid",
+  ownerName: "Alice"  // user's name; used to pre-fill splits during review
+}
+```
+
 ## How to Test
 
 ### With Backend (Recommended)
@@ -511,24 +594,27 @@ go build -o finance-tracker
 
 ### Review Flow
 1. User navigates to Review page
-2. System loads categories and unreviewed transactions from backend API
-3. System shows first unreviewed transaction
-4. User edits merchant name, assigns category from dropdown
-5. User optionally adds splits:
-   - Choose split type: Dollar Amount or Percentage
-   - Enter person name and amount/percentage
-   - Switch between types with auto-conversion
-   - Add multiple people with "Add Person" button
-6. User clicks "Save & Next" (marks reviewed), "Skip", or "Delete" (removes transaction entirely)
-7. System advances to next unreviewed transaction
-8. When complete, shows "All caught up!" message
+2. If `ownerName` is not set in database settings → error notification + redirect to Settings
+3. System loads settings, categories, and unreviewed transactions from backend API
+4. System shows first unreviewed transaction with a default split pre-filled for the owner (100%)
+5. User edits merchant name, assigns category from dropdown
+6. Owner's split amount is auto-calculated as the remainder after all other splits
+7. User optionally adds more people via "Add Person":
+   - Default type: Percentage, pre-filled with `100 / totalPeople`%
+   - Owner's auto split updates live to cover the remainder
+   - Switch between Dollar Amount / Percentage with auto-conversion
+8. User clicks "Save & Next" (marks reviewed), "Skip", or "Delete" (removes transaction entirely)
+9. System advances to next unreviewed transaction
+10. When complete, shows "All caught up!" message
 
 ### Transaction Table Flow
 1. User navigates to Transactions page
 2. System displays only **reviewed** transactions in sortable table
-3. User can search by merchant, filter by category
-4. User clicks row to open edit modal
-5. User can edit details and save changes
+3. Filter bar (3 rows): Category + Person | Start Date + End Date | Amount slider
+4. When filtering by Person: only transactions with that person's split are shown; amount column shows their split amount (with `(split)` label if >1 person)
+5. User can search by merchant, filter by category, date range, amount range, or person
+6. User clicks row to open edit modal
+7. User can edit details and save changes
 
 ## Important Implementation Notes
 
@@ -606,9 +692,12 @@ if (!AppState.requireActiveDatabase()) {
 ### Split Validation
 - Split amounts can differ from transaction total (shows warning)
 - Negative amounts for expenses, positive for income
-- Empty splits allowed (full amount to one person)
+- Default split: owner's name at 100% (auto-calculated, readonly, recalculates as other splits are added)
+- New splits default to Percentage type, pre-filled with `100 / totalPeople`%
+- Auto split (`data-auto="true"`) is always the first split; amount is computed as remainder of non-auto splits
 - Percentage splits: 0-100% range validation
 - Auto-converts between dollar and percentage when switching types
+- `getSplitsFromForm` handles auto splits (no typeSelect) by reading dollar amount directly
 
 ### Navigation Guards
 - `AppState.requireActiveDatabase()` on all pages except landing
@@ -642,6 +731,7 @@ if (!AppState.requireActiveDatabase()) {
 - [ ] Transaction deletion from table view
 - [x] Date range filtering ✅
 - [x] Amount range filtering ✅
+- [x] Person/split filtering on View Transactions ✅
 
 ### Medium Priority
 - [ ] Reports/charts (spending by category, over time)
@@ -706,6 +796,7 @@ if (!AppState.requireActiveDatabase()) {
 - [x] Only reviewed transactions shown in table (filter by review status removed)
 - [x] Filter by date range (start/end date pickers)
 - [x] Filter by amount range (dual-range slider)
+- [x] Filter by person (split name dropdown, shows individual split amount)
 - [x] Sort table columns
 - [x] Edit transaction from table
 - [x] Pagination works
@@ -820,14 +911,13 @@ This project prioritizes:
 - Add export functionality (CSV, JSON)?
 - Add reports/charts for spending analysis?
 - Add more CSV templates for common banks?
-- Add transaction search by amount or date range?
 - Add keyboard shortcuts?
 - Add a "quick add transaction" feature?
 - Transaction deletion from the table view?
 
 ---
 
-**Last Updated**: 2026-03-07 (Emoji picker for categories; amount range slider filter; date range filter; delete from review; reviewed-only transactions view; template debit sign; transaction source field)
+**Last Updated**: 2026-03-07 (Database Settings page; owner name pre-fill and auto split on review; percentage default split type; person filter on View Transactions; filter bar layout)
 **Status**: ✅ Frontend complete | ✅ Backend complete (all data in SQLite)
 
 **Current State**:
@@ -839,8 +929,9 @@ This project prioritizes:
 - ✅ Category CRUD operations via API
 - ✅ Transaction CRUD operations via API (including bulk import and delete)
 - ✅ Template CRUD operations via API
+- ✅ Settings CRUD operations via API (`database_settings` table)
 - ✅ Async state management for API integration
-- ✅ All 4 pages fully migrated to backend (no localStorage for data)
+- ✅ All 5 pages fully migrated to backend (no localStorage for data)
 - ✅ Split transactions by dollar amount or percentage (0-100%)
 - ✅ Modal component supports async handlers and stays open
 - ✅ Consistent form styling across all split inputs
@@ -851,32 +942,41 @@ This project prioritizes:
 - ✅ Emoji picker for category creation (grid of ~100 emojis, no external dependencies)
 - ✅ Amount range filter on View Transactions (dual-range slider, dynamic max)
 - ✅ Date range filter on View Transactions (native date pickers, default = all dates)
+- ✅ Database Settings page (owner name, persisted to SQLite)
+- ✅ Review page requires owner name to be set before reviewing
+- ✅ Review page pre-fills owner's split at 100% (auto-calculated, recalculates live)
+- ✅ New splits default to Percentage type with `100/N`% pre-filled
+- ✅ Person filter on View Transactions (shows individual split amount)
+- ✅ Filter bar organised into 3 rows: Category+Person, Dates, Amount
 
 **Working User Flow**:
 1. Create database → Saved to SQLite ✅
 2. Open database → Dashboard loads successfully ✅
-3. Create categories → Saved to SQLite ✅
-4. Create templates → Saved to SQLite ✅
+3. **Set your name** → Database Settings → enter owner name → Save ✅
+4. Create categories → Saved to SQLite ✅
+5. Create templates → Saved to SQLite ✅
    - Select debit sign convention (positive or negative) ✅
-5. Import CSV → Transactions bulk-imported to SQLite ✅
+6. Import CSV → Transactions bulk-imported to SQLite ✅
    - Amounts sign-adjusted per template debit sign ✅
    - Source set to template name ✅
-6. View transactions → Loads reviewed transactions from SQLite ✅
+7. View transactions → Loads reviewed transactions from SQLite ✅
    - Search by merchant ✅
    - Filter by category ✅
+   - Filter by person (shows their split amount; `(split)` label for multi-person) ✅
    - Filter by date range (start/end date pickers) ✅
    - Filter by amount range (dual-range slider) ✅
    - Source column shown ✅
    - Click to edit in modal ✅
-7. Edit transaction → Updates in SQLite ✅
+8. Edit transaction → Updates in SQLite ✅
    - Edit merchant name ✅
    - Assign categories from dropdown ✅
    - Add/edit splits ✅
    - Add notes ✅
-8. Review transactions → Loads from SQLite, saves to SQLite ✅
+9. Review transactions → Loads from SQLite, saves to SQLite ✅
+   - Redirects to Settings if owner name not set ✅
+   - Owner's split pre-filled at 100% (auto-calculated) ✅
+   - Add people → each gets `100/N`% default; owner auto-adjusts ✅
    - Assign categories from dropdown ✅
-   - Split by dollar or percentage ✅
-   - Auto-convert between split types ✅
    - Delete transaction entirely ✅
 
 **Next Recommended Work**:
@@ -884,4 +984,3 @@ This project prioritizes:
 2. Export to CSV/JSON functionality
 3. Reports/charts (spending by category, over time)
 4. Transaction deletion from the table view
-5. Date/amount range filtering

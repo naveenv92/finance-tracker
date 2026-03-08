@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Database Settings - Finance Tracker</title>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="css/reset.css">
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/global.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/pages/settings.css">
+</head>
+<body>
+  <div class="layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">Finance Tracker</div>
+      <nav class="sidebar-nav">
+        <a href="dashboard.html">Dashboard</a>
+        <a href="transactions.html">View Transactions</a>
+        <a href="review.html">Review Transactions</a>
+        <a href="settings.html" class="active">Settings</a>
+        <a href="index.html">Change Database</a>
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <div class="page-header">
+        <h1 class="page-title">Database Settings</h1>
+        <p class="page-description" id="db-name-desc"></p>
+      </div>
+
+      <div class="settings-container">
+        <div class="settings-section">
+          <h2>Personal</h2>
+          <div class="form-group">
+            <label for="owner-name" class="form-label">Your Name</label>
+            <input
+              type="text"
+              id="owner-name"
+              class="form-input"
+              placeholder="e.g. Alice"
+              maxlength="100"
+            >
+            <p class="form-hint">Used to pre-fill your name when splitting transactions.</p>
+          </div>
+          <div class="settings-actions">
+            <button class="btn btn-primary" id="save-btn">Save Settings</button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- JavaScript -->
+  <script type="module" src="js/pages/settings.js"></script>
+</body>
+</html>

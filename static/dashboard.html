@@ -22,6 +22,7 @@
         <a href="dashboard.html" class="active">Dashboard</a>
         <a href="transactions.html">View Transactions</a>
         <a href="review.html">Review Transactions</a>
+        <a href="settings.html">Settings</a>
         <a href="index.html" id="change-db-link">Change Database</a>
       </nav>
     </aside>
@@ -33,7 +34,10 @@
           <h1>Dashboard</h1>
           <p class="dashboard-db-name" id="db-name"></p>
         </div>
-        <button class="btn btn-secondary" id="change-db-btn">Change Database</button>
+        <div style="display:flex;gap:var(--spacing-sm);">
+          <a href="settings.html" class="btn btn-secondary">Database Settings</a>
+          <button class="btn btn-secondary" id="change-db-btn">Change Database</button>
+        </div>
       </div>
 
       <!-- Stats Grid -->

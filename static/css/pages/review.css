@@ -81,6 +81,18 @@
   color: var(--color-warning);
 }
 
+.split-auto-label {
+  font-size: var(--font-size-xs);
+  color: var(--gray-500);
+  font-weight: var(--font-weight-normal);
+}
+
+.split-item[data-auto="true"] .split-amount {
+  background-color: var(--gray-100);
+  color: var(--gray-600);
+  cursor: default;
+}
+
 .review-actions {
   display: flex;
   gap: var(--spacing-md);
