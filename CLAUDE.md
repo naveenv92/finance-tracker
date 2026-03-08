@@ -41,6 +41,7 @@ All planned features have been implemented:
    - Dashboard: Stats + action cards + CSV import
    - Transactions: Sortable table with search/filter
    - Review: One-by-one review workflow
+   - Analytics: Spending insights with charts and filters
 
 5. **Phase 5: Features** ✅
    - CSV import flow with template selection
@@ -242,6 +243,41 @@ Reorganised the filter bar into three rows: Category + Person on row 1, Start Da
 - **`transactions.js`**: Wrapped filter groups in `.table-filters-row` divs
 - **`transactions.css`**: Added `.table-filters-row { display: flex; gap: ...; width: 100%; }`
 
+### Feature: Analytics Page (2026-03-07) ✅
+
+Added a new Analytics page with spending insights built on Chart.js (CDN). Accessible from the sidebar and from a Quick Action card on the Dashboard.
+
+**Charts**:
+1. **Total Spent** — large stat card; sum of `Math.abs(amount)` for all reviewed transactions
+2. **Avg Spent / Day** — total ÷ number of days between earliest and latest transaction date
+3. **Spending Over Time** — bar chart grouped by month (x: "Jan 2026", y: spending amount)
+4. **Spending by Category** — doughnut chart; each slice is a category (or "Uncategorized"); tooltip shows amount + %
+5. **Spending by Source** — doughnut chart; each slice is a CSV template name (or "Unknown"); tooltip shows amount + %
+
+**Filters** (apply to all charts and stats simultaneously):
+- Start Date / End Date — native `<input type="date">` pickers, YYYY-MM-DD string comparison
+- Person — dropdown of unique names from splits; when active, uses each person's individual split amount
+
+**Implementation details**:
+- All amounts use `Math.abs()` — works regardless of whether expenses are stored as positive or negative (depends on `debitSign` template setting)
+- Chart instances stored in `chartInstances` map and destroyed via `chart.destroy()` before each re-render to avoid "Canvas is already in use" errors
+- `parseSplits()` handles JSON string or array format for splits
+
+**Changes**:
+- **`static/analytics.html`**: New page; loads Chart.js from CDN; sidebar nav with Analytics active
+- **`static/js/pages/analytics.js`**: Module-level `allTransactions`/`allCategories` state; `renderFilters()`, `applyFilters()`, `destroyCharts()`; chart renderers save instances to `chartInstances`
+- **`static/css/pages/analytics.css`**: Stat cards, analytics cards, chart containers, filter row layout
+- **`static/dashboard.html`**, **`transactions.html`**, **`review.html`**, **`settings.html`**: Added Analytics link to sidebar nav
+- **`static/js/pages/dashboard.js`**: Added Analytics Quick Action card (📈)
+
+### Bug Fix: Analytics Charts Showing Zero (2026-03-07) ✅
+
+**Problem**: Analytics stats showed $0.00 and charts were empty even with reviewed transactions in the database.
+
+**Root cause**: Analytics filtered transactions by `t.amount < 0` (assuming expenses are negative), but amounts are stored as positive values when the CSV template uses `debitSign='positive'` (the default). This filtered out all transactions.
+
+**Fix**: Removed the `t.amount < 0` filter entirely. All reviewed transactions are now included, and all amount calculations use `Math.abs(t.amount)`. This works correctly in both sign conventions.
+
 ## Key Architecture Decisions
 
 ### Data Storage
@@ -298,14 +334,15 @@ finance/
 └── config/             # Configuration files (future)
 ```
 
-### HTML Pages (5 files in `static/`)
+### HTML Pages (6 files in `static/`)
 - `static/index.html` - Landing/database selection
 - `static/dashboard.html` - Main hub with stats and actions
 - `static/transactions.html` - Table view of all transactions
 - `static/review.html` - One-by-one review interface
 - `static/settings.html` - Database settings (owner name)
+- `static/analytics.html` - Spending insights with charts
 
-### CSS Files (11 files in `static/css/`)
+### CSS Files (12 files in `static/css/`)
 - `static/css/reset.css` - CSS reset
 - `static/css/variables.css` - Design tokens
 - `static/css/global.css` - Global styles, layout, typography
@@ -317,8 +354,9 @@ finance/
 - `static/css/pages/transactions.css` - Transactions page specific
 - `static/css/pages/review.css` - Review page specific
 - `static/css/pages/settings.css` - Settings page specific
+- `static/css/pages/analytics.css` - Analytics page specific
 
-### JavaScript Files (16 files in `static/js/`)
+### JavaScript Files (17 files in `static/js/`)
 
 **Core (4 files)**:
 - `static/js/core/storage.js` - localStorage CRUD with prefix management
@@ -337,12 +375,13 @@ finance/
 - `static/js/components/notification.js` - Toast notifications
 - `static/js/components/table.js` - Sortable data table
 
-**Pages (5 files)**:
+**Pages (6 files)**:
 - `static/js/pages/landing.js` - Database CRUD (fully migrated to backend API)
 - `static/js/pages/dashboard.js` - Stats, import, templates, categories (fully migrated to backend API)
 - `static/js/pages/transactions.js` - Transaction table with filters (fully migrated to backend API)
 - `static/js/pages/review.js` - Review workflow (fully migrated to backend API)
 - `static/js/pages/settings.js` - Database settings (owner name)
+- `static/js/pages/analytics.js` - Spending analytics with Chart.js charts and filters
 
 **Documentation (2 files)**:
 - `README.md` - User-facing documentation
@@ -470,6 +509,14 @@ go build -o finance-tracker
   - ✅ Settings loading: `GET /api/databases/:id/settings`
   - ✅ Settings saving: `PUT /api/databases/:id/settings`
   - ✅ Shows database name in page description
+
+- **Analytics page** (`static/js/pages/analytics.js`):
+  - ✅ Transaction loading: `GET /api/databases/:id/transactions` (filtered by `reviewed`)
+  - ✅ Category loading: `GET /api/databases/:id/categories` (for category donut labels)
+  - ✅ All amounts use `Math.abs()` — works regardless of debitSign convention
+  - ✅ Filters: Start Date, End Date, Person (from splits)
+  - ✅ Person filter uses individual split amount for stats and charts
+  - ✅ Chart instances destroyed and recreated on every filter change
 
 - **State Management** (`static/js/core/state.js`):
   - ✅ `setActiveDatabase()` - async, verifies via backend API
@@ -708,10 +755,10 @@ if (!AppState.requireActiveDatabase()) {
 1. **No authentication**: Backend is open to anyone on localhost
 2. **No export**: Can't export data (only backup via SQLite file)
 3. **No bulk edit**: Must edit transactions one-by-one or via review
-4. **No reports**: No charts, graphs, or financial reports
-5. **Single currency**: No multi-currency support
-6. **Local development only**: Backend has no production security features
-7. **Category usage tracking**: Deleting a category does not null out `categoryId` on existing transactions (orphaned foreign key, benign since categories table is separate)
+4. **Single currency**: No multi-currency support
+5. **Local development only**: Backend has no production security features
+6. **Category usage tracking**: Deleting a category does not null out `categoryId` on existing transactions (orphaned foreign key, benign since categories table is separate)
+7. **Analytics uses absolute amounts**: `Math.abs(t.amount)` is used throughout analytics — income transactions (if any) are included in spending totals
 
 ## Potential Next Steps
 
@@ -734,7 +781,7 @@ if (!AppState.requireActiveDatabase()) {
 - [x] Person/split filtering on View Transactions ✅
 
 ### Medium Priority
-- [ ] Reports/charts (spending by category, over time)
+- [x] Reports/charts (spending by category, over time) ✅
 - [ ] Recurring transaction templates
 - [ ] Budget tracking
 - [ ] Account balances
@@ -797,6 +844,8 @@ if (!AppState.requireActiveDatabase()) {
 - [x] Filter by date range (start/end date pickers)
 - [x] Filter by amount range (dual-range slider)
 - [x] Filter by person (split name dropdown, shows individual split amount)
+- [x] Analytics page with Chart.js (total spent, avg/day, bar chart, 2 donut charts)
+- [x] Analytics filters (date range + person)
 - [x] Sort table columns
 - [x] Edit transaction from table
 - [x] Pagination works
@@ -909,15 +958,15 @@ This project prioritizes:
 
 ### Feature-related
 - Add export functionality (CSV, JSON)?
-- Add reports/charts for spending analysis?
 - Add more CSV templates for common banks?
 - Add keyboard shortcuts?
 - Add a "quick add transaction" feature?
 - Transaction deletion from the table view?
+- More analytics: budget vs actual, month-over-month comparison?
 
 ---
 
-**Last Updated**: 2026-03-07 (Database Settings page; owner name pre-fill and auto split on review; percentage default split type; person filter on View Transactions; filter bar layout)
+**Last Updated**: 2026-03-07 (Analytics page: Chart.js charts, date/person filters, debit sign bug fix; Analytics Quick Action on Dashboard)
 **Status**: ✅ Frontend complete | ✅ Backend complete (all data in SQLite)
 
 **Current State**:
@@ -948,6 +997,9 @@ This project prioritizes:
 - ✅ New splits default to Percentage type with `100/N`% pre-filled
 - ✅ Person filter on View Transactions (shows individual split amount)
 - ✅ Filter bar organised into 3 rows: Category+Person, Dates, Amount
+- ✅ Analytics page (Chart.js): total spent, avg/day, spending over time bar chart, by-category donut, by-source donut
+- ✅ Analytics filters: date range (start/end) and person (from splits)
+- ✅ Analytics accessible from sidebar and Dashboard Quick Actions
 
 **Working User Flow**:
 1. Create database → Saved to SQLite ✅
@@ -978,9 +1030,14 @@ This project prioritizes:
    - Add people → each gets `100/N`% default; owner auto-adjusts ✅
    - Assign categories from dropdown ✅
    - Delete transaction entirely ✅
+10. View analytics → Loads reviewed transactions + categories from SQLite ✅
+    - Total spent and avg/day stat cards ✅
+    - Spending over time bar chart (by month) ✅
+    - Spending by category donut chart ✅
+    - Spending by source donut chart ✅
+    - Filter by date range and/or person ✅
 
 **Next Recommended Work**:
 1. Add authentication for multi-user support
 2. Export to CSV/JSON functionality
-3. Reports/charts (spending by category, over time)
-4. Transaction deletion from the table view
+3. Transaction deletion from the table view

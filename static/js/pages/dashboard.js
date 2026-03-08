@@ -133,6 +133,11 @@ function renderActions() {
       <div class="action-card-title">Manage Categories</div>
       <div class="action-card-description">Create and organize transaction categories</div>
     </div>
+    <div class="card action-card" onclick="window.location.href='analytics.html'">
+      <div class="action-card-icon">📈</div>
+      <div class="action-card-title">Analytics</div>
+      <div class="action-card-description">View spending insights and charts</div>
+    </div>
   `;
 
   document.getElementById('actions-grid').innerHTML = actionsHTML;

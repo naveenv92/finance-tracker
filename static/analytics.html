@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Analytics - Finance Tracker</title>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="css/reset.css">
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/global.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/pages/analytics.css">
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">Finance Tracker</div>
+      <nav class="sidebar-nav">
+        <a href="dashboard.html">Dashboard</a>
+        <a href="transactions.html">View Transactions</a>
+        <a href="review.html">Review Transactions</a>
+        <a href="analytics.html" class="active">Analytics</a>
+        <a href="settings.html">Settings</a>
+        <a href="index.html">Change Database</a>
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <div class="page-header">
+        <h1 class="page-title">Analytics</h1>
+        <p class="page-description">Spending insights from your reviewed transactions.</p>
+      </div>
+
+      <!-- Filters -->
+      <div class="analytics-filters" id="analytics-filters"></div>
+
+      <!-- Stat Cards -->
+      <div class="analytics-stats" id="analytics-stats">
+        <div class="stat-card">
+          <div class="stat-label">Total Spent</div>
+          <div class="stat-value" id="stat-total">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Avg Spent / Day</div>
+          <div class="stat-value" id="stat-avg-day">—</div>
+        </div>
+      </div>
+
+      <!-- Bar Chart -->
+      <div class="analytics-card">
+        <h2 class="analytics-card-title">Spending Over Time</h2>
+        <div class="chart-container chart-container--bar">
+          <canvas id="chart-spending-over-time"></canvas>
+        </div>
+      </div>
+
+      <!-- Donut Charts Row -->
+      <div class="analytics-donuts">
+        <div class="analytics-card">
+          <h2 class="analytics-card-title">Spending by Category</h2>
+          <div class="chart-container chart-container--donut">
+            <canvas id="chart-by-category"></canvas>
+          </div>
+        </div>
+        <div class="analytics-card">
+          <h2 class="analytics-card-title">Spending by Source</h2>
+          <div class="chart-container chart-container--donut">
+            <canvas id="chart-by-source"></canvas>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- JavaScript -->
+  <script type="module" src="js/pages/analytics.js"></script>
+</body>
+</html>
