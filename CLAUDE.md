@@ -56,6 +56,7 @@ finance/
 
 // Category
 { id, name, color, emoji, createdAt }
+// Deleting a category nulls out categoryId on all referencing transactions
 
 // Template
 { id, name, dateColumn, merchantColumn, amountColumn, dateFormat, debitSign, createdAt }
@@ -118,7 +119,7 @@ AppState.requireActiveDatabase();          // sync guard, redirects to index.htm
 - Shows only `reviewed === true` transactions
 - Filters: Category + Person (row 1), Start/End Date (row 2), Amount slider (row 3)
 - Person filter shows individual split amount; `(split)` label when >1 person in splits
-- "+" button opens Add Transaction modal: date, merchant, amount, category, notes, splits; `source: "Manual"`, `reviewed: true`
+- "+" button opens Add Transaction modal: date, merchant, amount, category, source (dropdown of existing sources, defaults to "Manual"), notes, splits; `reviewed: true`
 - Split behavior matches Review page: first split is auto (owner, `data-auto="true"`, readonly, recalculates as remainder); additional splits have dollar/percentage type selector
 - `ownerName` loaded at init from settings; pre-filled as auto split in both Add and Edit modals
 - Bulk editing: checkbox column selects rows; action bar appears to bulk-set category or reviewed status
@@ -211,4 +212,4 @@ localStorage.removeItem('financeTracker:activeDb') // clear session
 - Keep files under 500 lines; prefer composition over inheritance
 
 ---
-**Last Updated**: 2026-03-08 | **Status**: ✅ Active development
+**Last Updated**: 2026-03-09 | **Status**: ✅ Active development

@@ -825,6 +825,11 @@ async function showAddTransactionModal() {
     console.error('Failed to load categories:', error);
   }
 
+  const existingSources = [...new Set(
+    allTransactions.map(t => t.source).filter(Boolean)
+  )].sort();
+  if (!existingSources.includes('Manual')) existingSources.unshift('Manual');
+
   const today = new Date().toISOString().slice(0, 10);
   const ownerSplitHTML = ownerName
     ? renderSplitsList([{ personName: ownerName, amount: 0 }], 0, true)
@@ -852,6 +857,12 @@ async function showAddTransactionModal() {
         </select>
       </div>
       <div class="form-group">
+        <label for="new-source" class="form-label">Source</label>
+        <select id="new-source" name="source" class="form-select">
+          ${existingSources.map(s => `<option value="${s}"${s === 'Manual' ? ' selected' : ''}>${s}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
         <label for="new-notes" class="form-label">Notes</label>
         <textarea id="new-notes" name="notes" class="form-textarea" placeholder="Optional notes..."></textarea>
       </div>
@@ -874,6 +885,7 @@ async function showAddTransactionModal() {
     const merchant = document.getElementById('new-merchant').value.trim();
     const amountRaw = parseFloat(document.getElementById('new-amount').value);
     const categoryId = document.getElementById('new-category').value || null;
+    const source = document.getElementById('new-source').value;
     const notes = document.getElementById('new-notes').value.trim();
 
     if (!date) {
@@ -902,7 +914,7 @@ async function showAddTransactionModal() {
       amount: amountRaw,
       categoryId,
       notes,
-      source: 'Manual',
+      source,
       reviewed: true,
       splits: JSON.stringify(splits),
     };

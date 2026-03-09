@@ -345,8 +345,13 @@ func GetCategory(databaseID, categoryID string) (*Category, error) {
 	return &c, nil
 }
 
-// DeleteCategory deletes a category
+// DeleteCategory deletes a category and nulls out its references in transactions
 func DeleteCategory(databaseID, categoryID string) error {
+	_, err := db.Exec(`UPDATE transactions SET category_id = NULL WHERE category_id = ? AND database_id = ?`, categoryID, databaseID)
+	if err != nil {
+		return fmt.Errorf("failed to clear category from transactions: %w", err)
+	}
+
 	query := `DELETE FROM categories WHERE id = ? AND database_id = ?`
 
 	result, err := db.Exec(query, categoryID, databaseID)
