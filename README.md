@@ -5,13 +5,16 @@ A lightweight personal finance tracker with a vanilla JavaScript frontend and Go
 ## Features
 
 - **Multiple Databases**: Create and switch between separate finance databases
-- **CSV Import**: Import transactions from bank statements with custom column-mapping templates
+- **CSV Import**: Import transactions from bank statements with custom column-mapping templates; duplicate detection by date + merchant + amount
+- **CSV Export**: Export reviewed transactions to CSV with optional date range filtering
 - **Manual Transactions**: Add one-off transactions directly from the Transactions page
 - **Transaction Review**: One-by-one workflow to categorize, rename merchants, and split costs
+- **Bulk Editing**: Select multiple transactions and bulk-update category or reviewed status
 - **Categories**: Custom categories with colors and emojis
 - **Transaction Splitting**: Split costs between multiple people with dollar or percentage amounts; owner auto-split recalculates as remainder
 - **Analytics**: Spending over time, by category, and by source — charts with per-person filtering
 - **Search & Filter**: Filter by category, person, date range, and amount range
+- **Backup & Restore**: Create JSON backups of any database from Settings; restore to a new database from any saved backup
 - **Data Persistence**: All data in SQLite via a RESTful Go backend; nothing in localStorage
 
 ## Getting Started
@@ -58,6 +61,7 @@ go build -o finance-tracker && ./finance-tracker  # production binary
 finance/
 ├── main.go          # HTTP server, routing, handlers
 ├── database.go      # SQLite schema and CRUD
+├── backup.go        # Backup/restore logic
 ├── go.mod / go.sum
 └── static/          # Embedded frontend
     ├── *.html       # index, dashboard, transactions, review, settings, analytics
@@ -70,6 +74,7 @@ finance/
 
 ~/.finance-tracker/
 ├── data.db
+├── backups/         # JSON backup files
 └── logs/server-YYYY-MM-DD.log
 ```
 
@@ -84,12 +89,18 @@ DELETE             /api/databases/:id/categories/:categoryId
 
 GET/POST           /api/databases/:id/transactions
 POST               /api/databases/:id/transactions/import
+GET                /api/databases/:id/transactions/export?start&end&filename
 PUT/DELETE         /api/databases/:id/transactions/:transactionId
 
 GET/POST           /api/databases/:id/templates
 DELETE             /api/databases/:id/templates/:templateId
 
 GET/PUT            /api/databases/:id/settings
+POST               /api/databases/:id/backup
+
+GET                /api/backups
+DELETE             /api/backups/:filename
+POST               /api/backups/:filename/restore
 ```
 
 ## Data Models
@@ -121,16 +132,13 @@ Templates map your bank's column headers to the expected fields. Supported date 
 
 The first split is always the owner (auto) — its amount equals the transaction total minus all other splits and updates live. Additional splits can be entered as a dollar amount or percentage. Splits are saved as a JSON array on the transaction.
 
-## Backup
+## Backup & Restore
 
-```bash
-cp ~/.finance-tracker/data.db ~/finance-backup-$(date +%Y%m%d).db
-```
+From **Settings → Backup & Restore**, click **Create Backup** to snapshot the current database (categories, transactions, templates, settings) to `~/.finance-tracker/backups/`. Each backup is a self-contained JSON file. Click **Restore** on any backup to create a new database from it — the original is not modified.
 
 ## Known Limitations
 
 - No authentication (localhost only)
-- No CSV/JSON export
 - Analytics includes income in totals (uses `Math.abs`)
 
 ## License

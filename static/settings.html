@@ -52,6 +52,20 @@
             <button class="btn btn-primary" id="save-btn">Save Settings</button>
           </div>
         </div>
+
+        <div class="settings-section">
+          <h2>Backup &amp; Restore</h2>
+          <p class="form-hint" style="margin-bottom: var(--spacing-lg);">
+            Backups are saved to <code>~/.finance-tracker/backups/</code> and include all transactions, categories, templates, and settings for this database. Restoring creates a new database from the backup.
+          </p>
+          <div class="settings-actions" style="justify-content: flex-start; margin-bottom: var(--spacing-lg);">
+            <button class="btn btn-primary" id="create-backup-btn">Create Backup</button>
+          </div>
+          <div id="backups-list-container">
+            <p class="backup-empty" id="backups-empty" style="display:none;">No backups yet.</p>
+            <ul class="backup-list" id="backups-list"></ul>
+          </div>
+        </div>
       </div>
     </main>
   </div>

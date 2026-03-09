@@ -87,6 +87,8 @@ func main() {
 	// API routes
 	http.HandleFunc("/api/databases", handleDatabases)
 	http.HandleFunc("/api/databases/", handleDatabaseRoutes)
+	http.HandleFunc("/api/backups", handleBackupList)
+	http.HandleFunc("/api/backups/", handleBackupRoutes)
 
 	log.Println("Registered API routes")
 
@@ -194,6 +196,8 @@ func handleDatabaseRoutes(w http.ResponseWriter, r *http.Request) {
 			}
 		case "settings":
 			handleSettings(w, r, dbID)
+		case "backup":
+			handleDatabaseBackup(w, r, dbID)
 		default:
 			http.Error(w, "Unknown resource", http.StatusNotFound)
 		}
@@ -607,6 +611,93 @@ func handleSettings(w http.ResponseWriter, r *http.Request, dbID string) {
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// handleDatabaseBackup handles POST /api/databases/:id/backup — creates a backup for a database
+func handleDatabaseBackup(w http.ResponseWriter, r *http.Request, dbID string) {
+	debugf("%s /api/databases/%s/backup", r.Method, dbID)
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	info, err := CreateBackup(dbID)
+	if err != nil {
+		log.Printf("ERROR creating backup db=%s: %v", dbID, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	debugf("created backup file=%s db=%s", info.Filename, dbID)
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(info)
+}
+
+// handleBackupList handles GET /api/backups — lists all backup files
+func handleBackupList(w http.ResponseWriter, r *http.Request) {
+	debugf("%s /api/backups", r.Method)
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	backups, err := ListBackups()
+	if err != nil {
+		log.Printf("ERROR listing backups: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	debugf("listed %d backups", len(backups))
+	json.NewEncoder(w).Encode(backups)
+}
+
+// handleBackupRoutes routes /api/backups/:filename and /api/backups/:filename/restore
+func handleBackupRoutes(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	path := strings.TrimPrefix(r.URL.Path, "/api/backups/")
+	parts := strings.SplitN(path, "/", 2)
+	filename := parts[0]
+
+	if filename == "" {
+		http.Error(w, "Filename is required", http.StatusBadRequest)
+		return
+	}
+
+	if len(parts) == 2 && parts[1] == "restore" {
+		// POST /api/backups/:filename/restore
+		debugf("%s /api/backups/%s/restore", r.Method, filename)
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		newDB, err := RestoreBackup(filename)
+		if err != nil {
+			log.Printf("ERROR restoring backup file=%s: %v", filename, err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		debugf("restored backup file=%s new db id=%s", filename, newDB.ID)
+		json.NewEncoder(w).Encode(newDB)
+		return
+	}
+
+	// DELETE /api/backups/:filename
+	debugf("%s /api/backups/%s", r.Method, filename)
+	if r.Method != http.MethodDelete {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := DeleteBackup(filename); err != nil {
+		log.Printf("ERROR deleting backup file=%s: %v", filename, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	debugf("deleted backup file=%s", filename)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // handleTemplateByID handles DELETE for specific template

@@ -27,10 +27,12 @@ finance/
 ├── static/         # Embedded frontend (embed.FS)
 ├── main.go         # HTTP server, routing, handlers
 ├── database.go     # SQLite CRUD, schema
+├── backup.go       # Backup/restore logic
 └── go.mod
 
 ~/.finance-tracker/
 ├── data.db
+├── backups/        # JSON backup files
 └── logs/server-YYYY-MM-DD.log
 ```
 
@@ -77,7 +79,8 @@ DELETE /api/databases/:id/categories/:categoryId
 
 GET    /api/databases/:id/transactions
 POST   /api/databases/:id/transactions
-POST   /api/databases/:id/transactions/import  (bulk import)
+POST   /api/databases/:id/transactions/import        (bulk import, dedup by date|merchant|amount)
+GET    /api/databases/:id/transactions/export        (?start=&end=&filename=)
 PUT    /api/databases/:id/transactions/:transactionId
 DELETE /api/databases/:id/transactions/:transactionId
 
@@ -87,6 +90,11 @@ DELETE /api/databases/:id/templates/:templateId
 
 GET    /api/databases/:id/settings
 PUT    /api/databases/:id/settings
+
+POST   /api/databases/:id/backup                     (creates JSON backup)
+GET    /api/backups                                  (list all backups)
+DELETE /api/backups/:filename
+POST   /api/backups/:filename/restore                (creates new DB from backup)
 ```
 
 ## State Management (async)
@@ -113,6 +121,7 @@ AppState.requireActiveDatabase();          // sync guard, redirects to index.htm
 - "+" button opens Add Transaction modal: date, merchant, amount, category, notes, splits; `source: "Manual"`, `reviewed: true`
 - Split behavior matches Review page: first split is auto (owner, `data-auto="true"`, readonly, recalculates as remainder); additional splits have dollar/percentage type selector
 - `ownerName` loaded at init from settings; pre-filled as auto split in both Add and Edit modals
+- Bulk editing: checkbox column selects rows; action bar appears to bulk-set category or reviewed status
 
 ### Analytics Page (Chart.js CDN)
 - Stats: Total Spent Lifetime, Total Spent This Month, Avg/Day Lifetime, Avg/Day This Month (2×2 layout)
@@ -125,11 +134,19 @@ AppState.requireActiveDatabase();          // sync guard, redirects to index.htm
 - All amounts use `Math.abs()`; chart instances stored in `chartInstances` map, destroyed before re-render
 - `disabledCategories` / `disabledSources` (module-level Sets) track toggled-off labels; stable color assignment based on sorted label order
 
-### CSV Import
+### CSV Import / Export
 - Template maps date/merchant/amount columns + date format + debit sign
 - `debitSign === "negative"` → multiply all amounts by `-1`
 - Sets `source` field to template name on each transaction
 - Supported date formats: MM/DD/YYYY, DD/MM/YYYY, YYYY-MM-DD, M/D/YYYY
+- Import deduplicates by `date|originalMerchant|amount` fingerprint
+- Export: `GET /api/databases/:id/transactions/export` streams a CSV of reviewed transactions; optional `start`/`end` date params
+
+### Backup & Restore
+- `POST /api/databases/:id/backup` writes `~/.finance-tracker/backups/{name}-{timestamp}.json` containing all categories, transactions, templates, and settings
+- `POST /api/backups/:filename/restore` creates a new database (named `{original} (Restored)`), remapping category IDs in transactions
+- Filenames are sanitised; path traversal is rejected
+- UI lives in Settings page; lists all backups across all databases
 
 ### Modal Component
 - Supports async submit handlers (`await`)
@@ -178,15 +195,10 @@ localStorage.removeItem('financeTracker:activeDb') // clear session
 ## Known Limitations
 
 1. No authentication (localhost only)
-2. No export (CSV/JSON)
-3. No bulk transaction editing
-4. No transaction deletion from table view
-5. Analytics includes income in spending totals (uses `Math.abs`)
+2. Analytics includes income in spending totals (uses `Math.abs`)
 
 ## Next Steps
 
-- [ ] Export to CSV/JSON
-- [ ] Transaction deletion from table view
 - [ ] Authentication (JWT) for multi-user support
 - [ ] Budget tracking / month-over-month analytics
 - [ ] Recurring transaction templates
@@ -199,4 +211,4 @@ localStorage.removeItem('financeTracker:activeDb') // clear session
 - Keep files under 500 lines; prefer composition over inheritance
 
 ---
-**Last Updated**: 2026-03-08 | **Status**: ✅ All features complete
+**Last Updated**: 2026-03-08 | **Status**: ✅ Active development

@@ -154,6 +154,27 @@ export const SettingsAPI = {
 };
 
 /**
+ * Backup API methods
+ */
+export const BackupAPI = {
+  async create(databaseId) {
+    return fetchAPI(`/databases/${databaseId}/backup`, { method: 'POST' });
+  },
+
+  async list() {
+    return fetchAPI('/backups');
+  },
+
+  async delete(filename) {
+    return fetchAPI(`/backups/${encodeURIComponent(filename)}`, { method: 'DELETE' });
+  },
+
+  async restore(filename) {
+    return fetchAPI(`/backups/${encodeURIComponent(filename)}/restore`, { method: 'POST' });
+  },
+};
+
+/**
  * Template API methods (placeholder for future implementation)
  */
 export const TemplateAPI = {
