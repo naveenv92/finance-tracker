@@ -18,6 +18,15 @@ import (
 //go:embed static/*
 var staticFiles embed.FS
 
+var debugMode bool
+
+// debugf logs only when LOG_LEVEL=DEBUG
+func debugf(format string, args ...interface{}) {
+	if debugMode {
+		log.Printf("[DEBUG] "+format, args...)
+	}
+}
+
 func setupLogging() error {
 	appDir, err := GetAppDataDir()
 	if err != nil {
@@ -45,7 +54,11 @@ func setupLogging() error {
 	log.SetOutput(multiWriter)
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 
+	debugMode = strings.EqualFold(os.Getenv("LOG_LEVEL"), "debug")
 	log.Printf("Logging initialized - writing to %s", logFilePath)
+	if debugMode {
+		log.Println("[DEBUG] Debug logging enabled")
+	}
 	return nil
 }
 
@@ -93,15 +106,18 @@ func main() {
 
 // handleDatabases handles GET (list) and POST (create) for databases
 func handleDatabases(w http.ResponseWriter, r *http.Request) {
+	debugf("%s /api/databases", r.Method)
 	w.Header().Set("Content-Type", "application/json")
 
 	switch r.Method {
 	case http.MethodGet:
 		databases, err := GetAllDatabases()
 		if err != nil {
+			log.Printf("ERROR listing databases: %v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		debugf("listed %d databases", len(databases))
 		json.NewEncoder(w).Encode(databases)
 
 	case http.MethodPost:
@@ -120,10 +136,12 @@ func handleDatabases(w http.ResponseWriter, r *http.Request) {
 
 		database, err := CreateDatabase(req.Name)
 		if err != nil {
+			log.Printf("ERROR creating database %q: %v", req.Name, err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
+		debugf("created database id=%s name=%q", database.ID, database.Name)
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(database)
 	}
@@ -184,20 +202,25 @@ func handleDatabaseRoutes(w http.ResponseWriter, r *http.Request) {
 
 // handleDatabaseByID handles GET and DELETE for specific database
 func handleDatabaseByID(w http.ResponseWriter, r *http.Request, dbID string) {
+	debugf("%s /api/databases/%s", r.Method, dbID)
 	switch r.Method {
 	case http.MethodGet:
 		database, err := GetDatabase(dbID)
 		if err != nil {
+			log.Printf("ERROR getting database id=%s: %v", dbID, err)
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
+		debugf("fetched database id=%s name=%q", dbID, database.Name)
 		json.NewEncoder(w).Encode(database)
 
 	case http.MethodDelete:
 		if err := DeleteDatabase(dbID); err != nil {
+			log.Printf("ERROR deleting database id=%s: %v", dbID, err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		debugf("deleted database id=%s", dbID)
 		w.WriteHeader(http.StatusNoContent)
 
 	default:
@@ -207,13 +230,16 @@ func handleDatabaseByID(w http.ResponseWriter, r *http.Request, dbID string) {
 
 // handleCategories handles GET (list) and POST (create) for categories
 func handleCategories(w http.ResponseWriter, r *http.Request, dbID string) {
+	debugf("%s /api/databases/%s/categories", r.Method, dbID)
 	switch r.Method {
 	case http.MethodGet:
 		categories, err := GetCategories(dbID)
 		if err != nil {
+			log.Printf("ERROR listing categories db=%s: %v", dbID, err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		debugf("listed %d categories db=%s", len(categories), dbID)
 		json.NewEncoder(w).Encode(categories)
 
 	case http.MethodPost:
@@ -230,10 +256,12 @@ func handleCategories(w http.ResponseWriter, r *http.Request, dbID string) {
 
 		created, err := CreateCategory(dbID, &category)
 		if err != nil {
+			log.Printf("ERROR creating category %q db=%s: %v", category.Name, dbID, err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
+		debugf("created category id=%s name=%q db=%s", created.ID, created.Name, dbID)
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(created)
 
@@ -244,12 +272,15 @@ func handleCategories(w http.ResponseWriter, r *http.Request, dbID string) {
 
 // handleCategoryByID handles DELETE for specific category
 func handleCategoryByID(w http.ResponseWriter, r *http.Request, dbID, categoryID string) {
+	debugf("%s /api/databases/%s/categories/%s", r.Method, dbID, categoryID)
 	switch r.Method {
 	case http.MethodDelete:
 		if err := DeleteCategory(dbID, categoryID); err != nil {
+			log.Printf("ERROR deleting category id=%s db=%s: %v", categoryID, dbID, err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		debugf("deleted category id=%s db=%s", categoryID, dbID)
 		w.WriteHeader(http.StatusNoContent)
 
 	default:
@@ -259,13 +290,16 @@ func handleCategoryByID(w http.ResponseWriter, r *http.Request, dbID, categoryID
 
 // handleTransactions handles GET (list) and POST (create) for transactions
 func handleTransactions(w http.ResponseWriter, r *http.Request, dbID string) {
+	debugf("%s /api/databases/%s/transactions", r.Method, dbID)
 	switch r.Method {
 	case http.MethodGet:
 		transactions, err := GetTransactions(dbID)
 		if err != nil {
+			log.Printf("ERROR listing transactions db=%s: %v", dbID, err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		debugf("listed %d transactions db=%s", len(transactions), dbID)
 		json.NewEncoder(w).Encode(transactions)
 
 	case http.MethodPost:
@@ -287,10 +321,12 @@ func handleTransactions(w http.ResponseWriter, r *http.Request, dbID string) {
 
 		created, err := CreateTransaction(dbID, &transaction)
 		if err != nil {
+			log.Printf("ERROR creating transaction merchant=%q db=%s: %v", transaction.Merchant, dbID, err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
+		debugf("created transaction id=%s merchant=%q date=%s amount=%.2f db=%s", created.ID, created.Merchant, created.Date, created.Amount, dbID)
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(created)
 
@@ -302,6 +338,7 @@ func handleTransactions(w http.ResponseWriter, r *http.Request, dbID string) {
 // handleTransactionImport handles bulk import of transactions, skipping duplicates.
 // Duplicates are detected by matching date + original_merchant + amount.
 func handleTransactionImport(w http.ResponseWriter, r *http.Request, dbID string) {
+	debugf("POST /api/databases/%s/transactions/import", dbID)
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -315,8 +352,11 @@ func handleTransactionImport(w http.ResponseWriter, r *http.Request, dbID string
 		return
 	}
 
+	debugf("import request: %d transactions db=%s", len(req.Transactions), dbID)
+
 	fingerprints, err := GetTransactionFingerprints(dbID)
 	if err != nil {
+		log.Printf("ERROR loading fingerprints db=%s: %v", dbID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -327,30 +367,36 @@ func handleTransactionImport(w http.ResponseWriter, r *http.Request, dbID string
 		t := &req.Transactions[i]
 		key := fmt.Sprintf("%s|%s|%.2f", t.Date, t.OriginalMerchant, t.Amount)
 		if fingerprints[key] {
+			debugf("skipping duplicate: date=%s merchant=%q amount=%.2f", t.Date, t.OriginalMerchant, t.Amount)
 			skipped++
 			continue
 		}
 		if _, err := CreateTransaction(dbID, t); err != nil {
+			log.Printf("ERROR importing transaction merchant=%q db=%s: %v", t.Merchant, dbID, err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		fingerprints[key] = true // prevent dupes within the same batch
+		fingerprints[key] = true
 		imported++
 	}
 
+	debugf("import complete: imported=%d skipped=%d db=%s", imported, skipped, dbID)
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]int{"imported": imported, "skipped": skipped})
 }
 
 // handleTransactionByID handles GET, PUT, and DELETE for specific transaction
 func handleTransactionByID(w http.ResponseWriter, r *http.Request, dbID, transactionID string) {
+	debugf("%s /api/databases/%s/transactions/%s", r.Method, dbID, transactionID)
 	switch r.Method {
 	case http.MethodGet:
 		transaction, err := GetTransaction(dbID, transactionID)
 		if err != nil {
+			log.Printf("ERROR getting transaction id=%s db=%s: %v", transactionID, dbID, err)
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
+		debugf("fetched transaction id=%s merchant=%q db=%s", transactionID, transaction.Merchant, dbID)
 		json.NewEncoder(w).Encode(transaction)
 
 	case http.MethodPut:
@@ -370,17 +416,21 @@ func handleTransactionByID(w http.ResponseWriter, r *http.Request, dbID, transac
 
 		updated, err := UpdateTransaction(dbID, &transaction)
 		if err != nil {
+			log.Printf("ERROR updating transaction id=%s db=%s: %v", transactionID, dbID, err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
+		debugf("updated transaction id=%s merchant=%q reviewed=%v db=%s", transactionID, updated.Merchant, updated.Reviewed, dbID)
 		json.NewEncoder(w).Encode(updated)
 
 	case http.MethodDelete:
 		if err := DeleteTransaction(dbID, transactionID); err != nil {
+			log.Printf("ERROR deleting transaction id=%s db=%s: %v", transactionID, dbID, err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		debugf("deleted transaction id=%s db=%s", transactionID, dbID)
 		w.WriteHeader(http.StatusNoContent)
 
 	default:
@@ -399,6 +449,7 @@ func handleTransactionExport(w http.ResponseWriter, r *http.Request, dbID string
 	startDate := r.URL.Query().Get("start")
 	endDate := r.URL.Query().Get("end")
 	filename := strings.TrimSpace(r.URL.Query().Get("filename"))
+	debugf("GET /api/databases/%s/transactions/export start=%q end=%q filename=%q", dbID, startDate, endDate, filename)
 	if filename == "" {
 		filename = fmt.Sprintf("transactions-%s.csv", time.Now().Format("2006-01-02"))
 	}
@@ -408,13 +459,16 @@ func handleTransactionExport(w http.ResponseWriter, r *http.Request, dbID string
 
 	transactions, err := GetTransactionsForExport(dbID, startDate, endDate)
 	if err != nil {
+		log.Printf("ERROR fetching transactions for export db=%s: %v", dbID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	debugf("exporting %d transactions db=%s", len(transactions), dbID)
 
 	// Build category map for name lookup
 	categories, err := GetCategories(dbID)
 	if err != nil {
+		log.Printf("ERROR fetching categories for export db=%s: %v", dbID, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -481,13 +535,16 @@ func formatSplitsForCSV(splitsJSON string) string {
 
 // handleTemplates handles GET (list) and POST (create) for templates
 func handleTemplates(w http.ResponseWriter, r *http.Request, dbID string) {
+	debugf("%s /api/databases/%s/templates", r.Method, dbID)
 	switch r.Method {
 	case http.MethodGet:
 		templates, err := GetTemplates(dbID)
 		if err != nil {
+			log.Printf("ERROR listing templates db=%s: %v", dbID, err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		debugf("listed %d templates db=%s", len(templates), dbID)
 		json.NewEncoder(w).Encode(templates)
 
 	case http.MethodPost:
@@ -504,10 +561,12 @@ func handleTemplates(w http.ResponseWriter, r *http.Request, dbID string) {
 
 		created, err := CreateTemplate(dbID, &template)
 		if err != nil {
+			log.Printf("ERROR creating template %q db=%s: %v", template.Name, dbID, err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
+		debugf("created template id=%s name=%q db=%s", created.ID, created.Name, dbID)
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(created)
 
@@ -518,13 +577,16 @@ func handleTemplates(w http.ResponseWriter, r *http.Request, dbID string) {
 
 // handleSettings handles GET and PUT for database settings
 func handleSettings(w http.ResponseWriter, r *http.Request, dbID string) {
+	debugf("%s /api/databases/%s/settings", r.Method, dbID)
 	switch r.Method {
 	case http.MethodGet:
 		settings, err := GetSettings(dbID)
 		if err != nil {
+			log.Printf("ERROR getting settings db=%s: %v", dbID, err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		debugf("fetched settings db=%s ownerName=%q", dbID, settings.OwnerName)
 		json.NewEncoder(w).Encode(settings)
 
 	case http.MethodPut:
@@ -535,9 +597,11 @@ func handleSettings(w http.ResponseWriter, r *http.Request, dbID string) {
 		}
 		updated, err := UpsertSettings(dbID, &settings)
 		if err != nil {
+			log.Printf("ERROR upserting settings db=%s: %v", dbID, err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		debugf("updated settings db=%s ownerName=%q", dbID, updated.OwnerName)
 		json.NewEncoder(w).Encode(updated)
 
 	default:
@@ -547,12 +611,15 @@ func handleSettings(w http.ResponseWriter, r *http.Request, dbID string) {
 
 // handleTemplateByID handles DELETE for specific template
 func handleTemplateByID(w http.ResponseWriter, r *http.Request, dbID, templateID string) {
+	debugf("%s /api/databases/%s/templates/%s", r.Method, dbID, templateID)
 	switch r.Method {
 	case http.MethodDelete:
 		if err := DeleteTemplate(dbID, templateID); err != nil {
+			log.Printf("ERROR deleting template id=%s db=%s: %v", templateID, dbID, err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		debugf("deleted template id=%s db=%s", templateID, dbID)
 		w.WriteHeader(http.StatusNoContent)
 
 	default:
