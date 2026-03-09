@@ -456,7 +456,7 @@ function generateCategoriesModalContent(categories) {
               <span class="category-badge" style="background-color: ${c.color};">
                 ${c.emoji || ''} ${c.name}
               </span>
-              <button class="btn btn-danger btn-small" onclick="deleteCategory('${c.id}')" style="padding: var(--spacing-xs);">✕</button>
+              <button class="btn btn-danger btn-small" onclick="deleteCategory('${c.id}')" style="width:22px;height:22px;border-radius:50%;padding:0;line-height:1;flex-shrink:0;">✕</button>
             </div>
           `).join('')}
         </div>
@@ -470,10 +470,21 @@ function generateCategoriesModalContent(categories) {
         <input type="text" id="category-name" name="name" class="form-input" placeholder="e.g., Food & Dining" required>
       </div>
       <div class="form-group">
-        <label for="category-color" class="form-label required">Color</label>
-        <div class="color-picker-wrapper">
-          <input type="color" id="category-color" name="color" value="#FF6B6B" required>
-          <input type="text" id="category-color-hex" class="form-input" value="#FF6B6B" pattern="^#[0-9A-Fa-f]{6}$" style="flex: 1;">
+        <label class="form-label required">Color</label>
+        <div class="color-swatches">
+          ${[
+            '#EF4444','#DC2626','#F97316','#FB923C','#F59E0B',
+            '#FBBF24','#EAB308','#84CC16','#A3E635','#22C55E',
+            '#16A34A','#10B981','#34D399','#14B8A6','#2DD4BF',
+            '#06B6D4','#0EA5E9','#3B82F6','#60A5FA','#6366F1',
+            '#818CF8','#8B5CF6','#A855F7','#C084FC','#EC4899',
+            '#F472B6','#F43F5E','#FB7185','#78716C','#6B7280',
+          ].map((c, i) => `
+            <label class="color-swatch-label" title="${c}">
+              <input type="radio" name="color" value="${c}" ${i === 0 ? 'checked' : ''} required>
+              <span class="color-swatch" style="background:${c};"></span>
+            </label>
+          `).join('')}
         </div>
       </div>
       <div class="form-group">
@@ -539,39 +550,21 @@ window.clearEmoji = function() {
 };
 
 /**
- * Setup color picker synchronization
+ * Setup emoji picker close-on-outside-click (registered once)
  */
 let emojiPickerListenerAdded = false;
 
 function setupColorSync() {
-  setTimeout(() => {
-    // Close emoji picker when clicking outside (register once)
-    if (!emojiPickerListenerAdded) {
-      emojiPickerListenerAdded = true;
-      document.addEventListener('click', (e) => {
-        const picker = document.getElementById('emoji-picker');
-        if (!picker) return;
-        if (!picker.contains(e.target) && !e.target.closest('[onclick="toggleEmojiPicker()"]')) {
-          picker.style.display = 'none';
-        }
-      }, { capture: true, passive: true });
-    }
-
-    const colorInput = document.getElementById('category-color');
-    const colorHexInput = document.getElementById('category-color-hex');
-
-    if (!colorInput || !colorHexInput) return;
-
-    colorInput.addEventListener('input', () => {
-      colorHexInput.value = colorInput.value.toUpperCase();
-    });
-
-    colorHexInput.addEventListener('input', () => {
-      if (isValidHexColor(colorHexInput.value)) {
-        colorInput.value = colorHexInput.value;
+  if (!emojiPickerListenerAdded) {
+    emojiPickerListenerAdded = true;
+    document.addEventListener('click', (e) => {
+      const picker = document.getElementById('emoji-picker');
+      if (!picker) return;
+      if (!picker.contains(e.target) && !e.target.closest('[onclick="toggleEmojiPicker()"]')) {
+        picker.style.display = 'none';
       }
-    });
-  }, 100);
+    }, { capture: true, passive: true });
+  }
 }
 
 /**
@@ -588,13 +581,6 @@ window.showCategoriesModal = async function() {
     modal.setSubmitText('Create Category');
 
     modal.setSubmitHandler(async () => {
-      // Sync color inputs
-      const colorInput = document.getElementById('category-color');
-      const colorHexInput = document.getElementById('category-color-hex');
-      if (colorInput && colorHexInput) {
-        colorInput.value = colorHexInput.value;
-      }
-
       const form = document.getElementById('category-form');
       if (!form) return false;
 

@@ -225,6 +225,7 @@
 .category-badge {
   padding: var(--spacing-xs) var(--spacing-md);
   font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
   border-radius: var(--radius-md);
   color: white;
 }
@@ -361,24 +362,32 @@
   margin-top: 1.5rem;
 }
 
-/* Color Picker */
-.color-picker-wrapper {
+/* Color Swatches */
+.color-swatches {
   display: flex;
-  gap: var(--spacing-md);
-  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
 }
 
-.color-picker-preview {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-md);
-  border: 2px solid var(--gray-300);
-}
-
-input[type="color"] {
-  width: 60px;
-  height: 40px;
-  border: none;
-  border-radius: var(--radius-md);
+.color-swatch-label {
   cursor: pointer;
+}
+
+.color-swatch-label input[type="radio"] {
+  display: none;
+}
+
+.color-swatch {
+  display: block;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  transition: outline-color 0.1s;
+}
+
+.color-swatch-label input[type="radio"]:checked + .color-swatch {
+  outline-color: var(--gray-700);
 }
