@@ -26,6 +26,7 @@ let maxAmount = 0;
 let nameFilter = '';
 let ownerName = '';
 const rowsPerPage = 50;
+const selectedIds = new Set();
 
 /**
  * Parse splits from a transaction (handles JSON string or array)
@@ -87,6 +88,9 @@ function setupEventListeners() {
 
   document.getElementById('export-csv-btn').addEventListener('click', showExportModal);
   document.getElementById('add-transaction-btn').addEventListener('click', showAddTransactionModal);
+  document.getElementById('bulk-category-btn').addEventListener('click', showBulkCategoryModal);
+  document.getElementById('bulk-delete-btn').addEventListener('click', handleBulkDelete);
+  document.getElementById('bulk-clear-btn').addEventListener('click', () => { selectedIds.clear(); updateBulkActionBar(); renderTable(); });
 }
 
 /**
@@ -273,7 +277,16 @@ async function renderTable() {
   const endIndex = startIndex + rowsPerPage;
   const paginatedData = filteredTransactions.slice(startIndex, endIndex);
 
+  const pageIds = paginatedData.map(r => r.id);
+  const allPageSelected = pageIds.length > 0 && pageIds.every(id => selectedIds.has(id));
+
   const columns = [
+    {
+      key: 'id',
+      headerHTML: `<input type="checkbox" class="select-all-checkbox" ${allPageSelected ? 'checked' : ''} title="Select all on this page">`,
+      sortable: false,
+      render: (id) => `<input type="checkbox" class="row-checkbox" data-id="${id}" ${selectedIds.has(id) ? 'checked' : ''}>`,
+    },
     {
       key: 'date',
       label: 'Date',
@@ -345,6 +358,53 @@ async function renderTable() {
     showTransactionModal(row);
   });
   table.render();
+  setupCheckboxListeners(paginatedData);
+}
+
+/**
+ * Wire up checkbox listeners after each table render
+ */
+function setupCheckboxListeners(paginatedData) {
+  // Row checkboxes
+  document.querySelectorAll('.row-checkbox').forEach(cb => {
+    cb.addEventListener('change', (e) => {
+      const id = e.target.dataset.id;
+      if (e.target.checked) selectedIds.add(id);
+      else selectedIds.delete(id);
+      updateBulkActionBar();
+      // Update select-all state
+      const allChecked = paginatedData.every(r => selectedIds.has(r.id));
+      const selectAll = document.querySelector('.select-all-checkbox');
+      if (selectAll) selectAll.checked = allChecked;
+    });
+    // Prevent row click modal when clicking checkbox
+    cb.addEventListener('click', (e) => e.stopPropagation());
+  });
+
+  // Select-all checkbox
+  const selectAll = document.querySelector('.select-all-checkbox');
+  if (selectAll) {
+    selectAll.addEventListener('change', (e) => {
+      paginatedData.forEach(r => {
+        if (e.target.checked) selectedIds.add(r.id);
+        else selectedIds.delete(r.id);
+      });
+      updateBulkActionBar();
+      renderTable();
+    });
+    selectAll.addEventListener('click', (e) => e.stopPropagation());
+  }
+}
+
+/**
+ * Show/hide the bulk action bar and update the count label
+ */
+function updateBulkActionBar() {
+  const bar = document.getElementById('bulk-action-bar');
+  const count = document.getElementById('bulk-action-count');
+  const n = selectedIds.size;
+  bar.hidden = n === 0;
+  count.textContent = `${n} selected`;
 }
 
 /**
@@ -897,6 +957,85 @@ function updateSplitTotal(transactionAmount) {
   document.querySelectorAll('.split-percentage').forEach(input => {
     input.addEventListener('input', () => updateSplitTotal(transactionAmount));
   });
+}
+
+/**
+ * Show bulk category assignment modal
+ */
+async function showBulkCategoryModal() {
+  const dbId = AppState.getActiveDatabaseId();
+  let categories = [];
+  try {
+    categories = await CategoryAPI.getAll(dbId);
+  } catch (e) {
+    Notification.error('Failed to load categories');
+    return;
+  }
+
+  const contentHTML = `
+    <p style="margin-bottom: var(--spacing-md); color: var(--gray-600);">
+      Assign a category to <strong>${selectedIds.size}</strong> selected transaction${selectedIds.size !== 1 ? 's' : ''}.
+    </p>
+    <div class="form-group">
+      <label for="bulk-category-select" class="form-label">Category</label>
+      <select id="bulk-category-select" class="form-select">
+        <option value="">Uncategorized</option>
+        ${categories.map(c => `<option value="${c.id}">${c.emoji || ''} ${c.name}</option>`).join('')}
+      </select>
+    </div>
+  `;
+
+  const modal = Modal.create('bulk-category-modal', 'Assign Category', contentHTML);
+  modal.setSubmitText('Apply');
+
+  modal.setSubmitHandler(async () => {
+    const categoryId = document.getElementById('bulk-category-select').value || null;
+    const ids = [...selectedIds];
+
+    // Find full transaction objects for the selected IDs
+    const toUpdate = allTransactions.filter(t => ids.includes(t.id));
+
+    try {
+      await Promise.all(toUpdate.map(t =>
+        TransactionAPI.update(dbId, { ...t, categoryId, splits: typeof t.splits === 'string' ? t.splits : JSON.stringify(t.splits) })
+      ));
+      Notification.success(`Updated ${toUpdate.length} transaction${toUpdate.length !== 1 ? 's' : ''}`);
+      selectedIds.clear();
+      updateBulkActionBar();
+      await loadTransactions();
+      filterTransactions();
+    } catch (e) {
+      console.error('Bulk category update failed:', e);
+      Notification.error('Failed to update transactions');
+      return false;
+    }
+  });
+
+  modal.show();
+}
+
+/**
+ * Bulk delete selected transactions
+ */
+async function handleBulkDelete() {
+  const n = selectedIds.size;
+  if (!confirm(`Delete ${n} transaction${n !== 1 ? 's' : ''}? This cannot be undone.`)) return;
+
+  const dbId = AppState.getActiveDatabaseId();
+  const ids = [...selectedIds];
+
+  try {
+    await Promise.all(ids.map(id => TransactionAPI.delete(dbId, id)));
+    Notification.success(`Deleted ${n} transaction${n !== 1 ? 's' : ''}`);
+    selectedIds.clear();
+    updateBulkActionBar();
+    await loadTransactions();
+    await renderFilters();
+    filterTransactions();
+  } catch (e) {
+    console.error('Bulk delete failed:', e);
+    Notification.error('Failed to delete transactions');
+  }
 }
 
 /**

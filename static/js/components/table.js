@@ -44,7 +44,11 @@ export class Table {
 
     this.columns.forEach(col => {
       const th = document.createElement('th');
-      th.textContent = col.label;
+      if (col.headerHTML !== undefined) {
+        th.innerHTML = col.headerHTML;
+      } else {
+        th.textContent = col.label;
+      }
 
       if (col.sortable !== false) {
         th.classList.add('sortable');
