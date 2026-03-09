@@ -38,7 +38,7 @@
 }
 
 .database-section {
-  background-color: white;
+  background-color: var(--white);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
   padding: var(--spacing-xl);

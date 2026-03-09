@@ -62,7 +62,7 @@ p {
 
 .sidebar {
   width: var(--sidebar-width);
-  background-color: white;
+  background-color: var(--white);
   border-right: 1px solid var(--gray-200);
   padding: var(--spacing-lg);
   flex-shrink: 0;

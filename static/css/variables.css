@@ -1,4 +1,11 @@
 :root {
+  /* Surface (overridden per theme) */
+  --white: #ffffff;
+
+  /* Focus ring and primary tint (updated per theme) */
+  --focus-ring-color: rgba(74, 144, 226, 0.2);
+  --primary-bg-hover: rgba(74, 144, 226, 0.05);
+
   /* Color Palette */
   --color-primary: #4A90E2;
   --color-primary-dark: #357ABD;
@@ -91,4 +98,105 @@
   --z-dropdown: 1000;
   --z-modal: 1100;
   --z-notification: 1200;
+}
+
+/* ── Vibrant theme ─────────────────────────────────────────── */
+[data-theme="vibrant"] {
+  --color-primary: #8B5CF6;
+  --color-primary-dark: #7C3AED;
+  --color-primary-light: #A78BFA;
+
+  --color-success: #06D6A0;
+  --color-success-light: #CCFBF1;
+
+  --color-error: #F43F5E;
+  --color-error-light: #FFE4E6;
+
+  --color-warning: #FB923C;
+  --color-warning-light: #FFEDD5;
+
+  --color-danger: #F43F5E;
+  --color-income: #06D6A0;
+  --color-expense: #F43F5E;
+
+  --focus-ring-color: rgba(139, 92, 246, 0.2);
+  --primary-bg-hover: rgba(139, 92, 246, 0.05);
+}
+
+/* ── Pastel theme ──────────────────────────────────────────── */
+[data-theme="pastel"] {
+  --color-primary: #7BAFC7;
+  --color-primary-dark: #5C95B0;
+  --color-primary-light: #A4CAD9;
+
+  --color-success: #73C5A4;
+  --color-success-light: #D4F0E6;
+
+  --color-error: #D98F8F;
+  --color-error-light: #F9E0E0;
+
+  --color-warning: #D4A96A;
+  --color-warning-light: #F5E4C8;
+
+  --color-danger: #C47878;
+  --color-income: #73C5A4;
+  --color-expense: #D98F8F;
+
+  --gray-50:  #FAF8F5;
+  --gray-100: #F3EFE9;
+  --gray-200: #E6DED5;
+  --gray-300: #D2C7BC;
+  --gray-400: #AFA49A;
+  --gray-500: #8A7E75;
+  --gray-600: #665E57;
+  --gray-700: #46413C;
+  --gray-800: #2E2A26;
+  --gray-900: #1C1916;
+
+  --focus-ring-color: rgba(123, 175, 199, 0.2);
+  --primary-bg-hover: rgba(123, 175, 199, 0.05);
+}
+
+/* ── Dark theme ────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --white: #1E293B;
+
+  --color-primary: #60A5FA;
+  --color-primary-dark: #3B82F6;
+  --color-primary-light: #93C5FD;
+
+  --color-success: #34D399;
+  --color-success-light: rgba(52, 211, 153, 0.15);
+
+  --color-error: #F87171;
+  --color-error-light: rgba(248, 113, 113, 0.15);
+
+  --color-warning: #FBBF24;
+  --color-warning-light: rgba(251, 191, 36, 0.15);
+
+  --color-danger: #EF4444;
+  --color-income: #34D399;
+  --color-expense: #F87171;
+
+  /* Inverted slate gray scale */
+  --gray-50:  #0F172A;
+  --gray-100: #1E293B;
+  --gray-200: #334155;
+  --gray-300: #475569;
+  --gray-400: #64748B;
+  --gray-500: #94A3B8;
+  --gray-600: #CBD5E1;
+  --gray-700: #E2E8F0;
+  --gray-800: #F1F5F9;
+  --gray-900: #F8FAFC;
+
+  /* Stronger shadows on dark backgrounds */
+  --shadow-sm:   0 1px 2px 0 rgba(0, 0, 0, 0.5);
+  --shadow-base: 0 1px 3px 0 rgba(0, 0, 0, 0.6), 0 1px 2px 0 rgba(0, 0, 0, 0.5);
+  --shadow-md:   0 4px 6px -1px rgba(0, 0, 0, 0.6), 0 2px 4px -1px rgba(0, 0, 0, 0.5);
+  --shadow-lg:   0 10px 15px -3px rgba(0, 0, 0, 0.6), 0 4px 6px -2px rgba(0, 0, 0, 0.4);
+  --shadow-2xl:  0 25px 50px -12px rgba(0, 0, 0, 0.7);
+
+  --focus-ring-color: rgba(96, 165, 250, 0.25);
+  --primary-bg-hover: rgba(96, 165, 250, 0.1);
 }

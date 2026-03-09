@@ -39,7 +39,7 @@
 
 /* Modal Container */
 .modal {
-  background-color: white;
+  background-color: var(--white);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-2xl);
   max-width: 600px;

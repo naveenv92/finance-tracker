@@ -6,6 +6,30 @@ import { AppState } from '../core/state.js';
 import { SettingsAPI, BackupAPI } from '../core/api.js';
 import { Notification } from '../components/notification.js';
 
+const THEMES = [
+  {
+    id: 'default',
+    name: 'Default',
+    // diagonal split: primary color | body background
+    swatch: 'linear-gradient(135deg, #4A90E2 50%, #F9FAFB 50%)',
+  },
+  {
+    id: 'vibrant',
+    name: 'Vibrant',
+    swatch: 'linear-gradient(135deg, #8B5CF6 50%, #FAFAFA 50%)',
+  },
+  {
+    id: 'pastel',
+    name: 'Pastel',
+    swatch: 'linear-gradient(135deg, #7BAFC7 50%, #FAF8F5 50%)',
+  },
+  {
+    id: 'dark',
+    name: 'Dark',
+    swatch: 'linear-gradient(135deg, #1E293B 50%, #0F172A 50%)',
+  },
+];
+
 // Check for active database
 if (!AppState.requireActiveDatabase()) {
   // Will redirect to landing page
@@ -27,6 +51,7 @@ async function init() {
   document.getElementById('db-name-desc').textContent = database.name;
 
   await loadSettings();
+  renderThemePicker();
   await loadBackups();
 
   document.getElementById('save-btn').addEventListener('click', saveSettings);
@@ -60,6 +85,51 @@ async function saveSettings() {
   } catch (error) {
     console.error('Error saving settings:', error);
     Notification.error('Failed to save settings');
+  }
+}
+
+/**
+ * Render the theme picker and handle selection
+ */
+function renderThemePicker() {
+  const container = document.getElementById('theme-picker');
+  const current = localStorage.getItem('financeTracker:theme') || 'default';
+
+  container.innerHTML = '';
+
+  for (const theme of THEMES) {
+    const btn = document.createElement('button');
+    btn.className = 'theme-option' + (theme.id === current ? ' active' : '');
+    btn.type = 'button';
+    btn.setAttribute('aria-label', `${theme.name} theme`);
+
+    btn.innerHTML = `
+      <div class="theme-swatch" style="background:${theme.swatch}">
+        <span class="theme-check">✓</span>
+      </div>
+      <div class="theme-label">${theme.name}</div>
+    `;
+
+    btn.addEventListener('click', () => {
+      applyTheme(theme.id);
+      container.querySelectorAll('.theme-option').forEach(el => el.classList.remove('active'));
+      btn.classList.add('active');
+    });
+
+    container.appendChild(btn);
+  }
+}
+
+/**
+ * Apply a theme by setting the data-theme attribute and persisting to localStorage
+ */
+function applyTheme(themeId) {
+  if (themeId === 'default') {
+    document.documentElement.removeAttribute('data-theme');
+    localStorage.removeItem('financeTracker:theme');
+  } else {
+    document.documentElement.setAttribute('data-theme', themeId);
+    localStorage.setItem('financeTracker:theme', themeId);
   }
 }
 
