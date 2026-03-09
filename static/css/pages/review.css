@@ -93,6 +93,17 @@
   cursor: default;
 }
 
+.duplicate-warning {
+  background-color: var(--color-warning-light);
+  border: 1px solid var(--color-warning);
+  border-radius: var(--radius-md);
+  color: var(--gray-800);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  padding: var(--spacing-sm) var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+}
+
 .review-actions {
   display: flex;
   gap: var(--spacing-md);

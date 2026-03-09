@@ -135,6 +135,11 @@ function renderReviewForm() {
         </div>
       </div>
 
+      ${transaction.possibleDuplicate ? `
+      <div class="duplicate-warning">
+        ⚠ Possible Duplicate — a transaction with the same date, merchant, and amount already exists.
+      </div>` : ''}
+
       <form id="review-form" class="review-form">
         <div class="form-group">
           <label class="form-label">Date</label>

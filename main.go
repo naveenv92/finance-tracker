@@ -339,8 +339,8 @@ func handleTransactions(w http.ResponseWriter, r *http.Request, dbID string) {
 	}
 }
 
-// handleTransactionImport handles bulk import of transactions, skipping duplicates.
-// Duplicates are detected by matching date + original_merchant + amount.
+// handleTransactionImport handles bulk import of transactions.
+// Transactions matching an existing date + original_merchant + amount are imported but flagged as possible duplicates.
 func handleTransactionImport(w http.ResponseWriter, r *http.Request, dbID string) {
 	debugf("POST /api/databases/%s/transactions/import", dbID)
 	if r.Method != http.MethodPost {
@@ -366,14 +366,14 @@ func handleTransactionImport(w http.ResponseWriter, r *http.Request, dbID string
 	}
 
 	imported := 0
-	skipped := 0
+	duplicates := 0
 	for i := range req.Transactions {
 		t := &req.Transactions[i]
 		key := fmt.Sprintf("%s|%s|%.2f", t.Date, t.OriginalMerchant, t.Amount)
 		if fingerprints[key] {
-			debugf("skipping duplicate: date=%s merchant=%q amount=%.2f", t.Date, t.OriginalMerchant, t.Amount)
-			skipped++
-			continue
+			debugf("flagging possible duplicate: date=%s merchant=%q amount=%.2f", t.Date, t.OriginalMerchant, t.Amount)
+			t.PossibleDuplicate = true
+			duplicates++
 		}
 		if _, err := CreateTransaction(dbID, t); err != nil {
 			log.Printf("ERROR importing transaction merchant=%q db=%s: %v", t.Merchant, dbID, err)
@@ -384,9 +384,9 @@ func handleTransactionImport(w http.ResponseWriter, r *http.Request, dbID string
 		imported++
 	}
 
-	debugf("import complete: imported=%d skipped=%d db=%s", imported, skipped, dbID)
+	debugf("import complete: imported=%d duplicates=%d db=%s", imported, duplicates, dbID)
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]int{"imported": imported, "skipped": skipped})
+	json.NewEncoder(w).Encode(map[string]int{"imported": imported, "duplicates": duplicates})
 }
 
 // handleTransactionByID handles GET, PUT, and DELETE for specific transaction

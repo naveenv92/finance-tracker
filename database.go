@@ -68,10 +68,11 @@ type Transaction struct {
 	Amount           float64   `json:"amount"`
 	CategoryID       *string   `json:"categoryId"`
 	Splits           string    `json:"splits,omitempty"` // JSON array stored as string
-	Reviewed         bool      `json:"reviewed"`
-	ImportedAt       time.Time `json:"importedAt"`
-	Notes            string    `json:"notes,omitempty"`
-	Source           string    `json:"source,omitempty"` // Name of the template used to import
+	Reviewed          bool      `json:"reviewed"`
+	ImportedAt        time.Time `json:"importedAt"`
+	Notes             string    `json:"notes,omitempty"`
+	Source            string    `json:"source,omitempty"` // Name of the template used to import
+	PossibleDuplicate bool      `json:"possibleDuplicate,omitempty"`
 }
 
 // InitDB initializes the SQLite database and creates tables
@@ -113,6 +114,7 @@ func InitDB() error {
 		imported_at DATETIME NOT NULL,
 		notes TEXT,
 		source TEXT,
+		possible_duplicate BOOLEAN NOT NULL DEFAULT 0,
 		FOREIGN KEY (database_id) REFERENCES databases(id) ON DELETE CASCADE
 	);
 
@@ -520,8 +522,8 @@ func CreateTransaction(databaseID string, transaction *Transaction) (*Transactio
 	transaction.ImportedAt = time.Now()
 
 	query := `
-		INSERT INTO transactions (id, database_id, date, merchant, original_merchant, amount, category_id, splits, reviewed, imported_at, notes, source)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO transactions (id, database_id, date, merchant, original_merchant, amount, category_id, splits, reviewed, imported_at, notes, source, possible_duplicate)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	_, err := db.Exec(query,
@@ -537,6 +539,7 @@ func CreateTransaction(databaseID string, transaction *Transaction) (*Transactio
 		transaction.ImportedAt,
 		transaction.Notes,
 		transaction.Source,
+		transaction.PossibleDuplicate,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create transaction: %w", err)
@@ -551,7 +554,7 @@ func CreateTransaction(databaseID string, transaction *Transaction) (*Transactio
 // GetTransactions retrieves all transactions for a database
 func GetTransactions(databaseID string) ([]*Transaction, error) {
 	query := `
-		SELECT id, database_id, date, merchant, original_merchant, amount, category_id, splits, reviewed, imported_at, notes, source
+		SELECT id, database_id, date, merchant, original_merchant, amount, category_id, splits, reviewed, imported_at, notes, source, possible_duplicate
 		FROM transactions
 		WHERE database_id = ?
 		ORDER BY date DESC, imported_at DESC
@@ -584,6 +587,7 @@ func GetTransactions(databaseID string) ([]*Transaction, error) {
 			&t.ImportedAt,
 			&notes,
 			&source,
+			&t.PossibleDuplicate,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan transaction: %w", err)
 		}

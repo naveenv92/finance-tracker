@@ -50,9 +50,10 @@ finance/
 { id, name, createdAt, lastModified }
 
 // Transaction
-{ id, date, merchant, originalMerchant, amount, categoryId, splits, reviewed, importedAt, notes, source }
+{ id, date, merchant, originalMerchant, amount, categoryId, splits, reviewed, importedAt, notes, source, possibleDuplicate }
 // splits: [{ personName, amount }] — stored as JSON string in SQLite
 // source: name of CSV template used during import
+// possibleDuplicate: true when imported transaction matches existing date|originalMerchant|amount
 
 // Category
 { id, name, color, emoji, createdAt }
@@ -140,7 +141,8 @@ AppState.requireActiveDatabase();          // sync guard, redirects to index.htm
 - `debitSign === "negative"` → multiply all amounts by `-1`
 - Sets `source` field to template name on each transaction
 - Supported date formats: MM/DD/YYYY, DD/MM/YYYY, YYYY-MM-DD, M/D/YYYY
-- Import deduplicates by `date|originalMerchant|amount` fingerprint
+- Import detects duplicates by `date|originalMerchant|amount` fingerprint; imports them but sets `possibleDuplicate: true` instead of skipping
+- Review page shows a "Possible Duplicate" warning banner on flagged transactions
 - Export: `GET /api/databases/:id/transactions/export` streams a CSV of reviewed transactions; optional `start`/`end` date params
 
 ### Backup & Restore

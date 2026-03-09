@@ -5,7 +5,7 @@ A lightweight personal finance tracker with a vanilla JavaScript frontend and Go
 ## Features
 
 - **Multiple Databases**: Create and switch between separate finance databases
-- **CSV Import**: Import transactions from bank statements with custom column-mapping templates; duplicate detection by date + merchant + amount
+- **CSV Import**: Import transactions from bank statements with custom column-mapping templates; transactions matching an existing date + merchant + amount are flagged as "Possible Duplicate" for user review rather than silently skipped
 - **CSV Export**: Export reviewed transactions to CSV with optional date range filtering
 - **Manual Transactions**: Add one-off transactions directly from the Transactions page; source defaults to "Manual" but can be set to any existing source in the database
 - **Transaction Review**: One-by-one workflow to categorize, rename merchants, and split costs
@@ -110,8 +110,9 @@ POST               /api/backups/:filename/restore
 { id, date, merchant, originalMerchant, amount, categoryId,
   splits,      // [{ personName, amount }] — stored as JSON string
   reviewed,    // true = visible on Transactions page
-  notes, source, importedAt }
+  notes, source, importedAt, possibleDuplicate }
 // source: template name for CSV imports; "Manual" for manually added (selectable from existing sources)
+// possibleDuplicate: flagged during import when date + originalMerchant + amount matches an existing transaction
 
 // Category
 { id, name, color, emoji, createdAt }

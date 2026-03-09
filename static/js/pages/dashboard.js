@@ -244,9 +244,9 @@ window.showImportCSVModal = async function() {
 
         try {
           const result = await TransactionAPI.importMany(dbId, transactions);
-          const { imported, skipped } = result;
-          if (skipped > 0) {
-            Notification.success(`Imported ${imported} transaction${imported !== 1 ? 's' : ''}, skipped ${skipped} duplicate${skipped !== 1 ? 's' : ''}`);
+          const { imported, duplicates } = result;
+          if (duplicates > 0) {
+            Notification.success(`Imported ${imported} transaction${imported !== 1 ? 's' : ''} (${duplicates} flagged as possible duplicate${duplicates !== 1 ? 's' : ''})`);
           } else {
             Notification.success(`Imported ${imported} transaction${imported !== 1 ? 's' : ''}`);
           }
