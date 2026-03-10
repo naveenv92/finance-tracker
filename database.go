@@ -509,6 +509,55 @@ func GetTemplate(databaseID, templateID string) (*Template, error) {
 	return &t, nil
 }
 
+// UpdateTemplate updates an existing template and cascades name changes to transaction sources
+func UpdateTemplate(databaseID string, template *Template) error {
+	// Fetch current name before updating so we can cascade a rename
+	existing, err := GetTemplate(databaseID, template.ID)
+	if err != nil {
+		return err
+	}
+
+	result, err := db.Exec(`
+		UPDATE templates
+		SET name = ?, date_column = ?, merchant_column = ?, amount_column = ?, date_format = ?, debit_sign = ?
+		WHERE id = ? AND database_id = ?
+	`,
+		template.Name,
+		template.DateColumn,
+		template.MerchantColumn,
+		template.AmountColumn,
+		template.DateFormat,
+		template.DebitSign,
+		template.ID,
+		databaseID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update template: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("template not found")
+	}
+
+	// Cascade name change to all transactions imported with this template
+	if existing.Name != template.Name {
+		if _, err := db.Exec(
+			`UPDATE transactions SET source = ? WHERE database_id = ? AND source = ?`,
+			template.Name, databaseID, existing.Name,
+		); err != nil {
+			return fmt.Errorf("failed to cascade template rename to transactions: %w", err)
+		}
+	}
+
+	UpdateDatabaseTimestamp(databaseID)
+	return nil
+}
+
 // DeleteTemplate deletes a template
 func DeleteTemplate(databaseID, templateID string) error {
 	query := `DELETE FROM templates WHERE id = ? AND database_id = ?`

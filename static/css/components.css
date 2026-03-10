@@ -450,3 +450,26 @@
 .category-menu-btn--delete:hover {
   background: var(--color-error-light);
 }
+
+/* Template item selectable (in Manage Templates modal) */
+.template-item-selectable {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-sm);
+  border: 2px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.template-item-selectable:hover {
+  border-color: var(--gray-300);
+}
+
+.template-item-selectable.menu-open,
+.template-item-selectable.selected {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--focus-ring-color);
+}

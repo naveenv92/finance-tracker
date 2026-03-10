@@ -312,6 +312,10 @@ window.showImportCSVModal = async function() {
 window.showTemplatesModal = async function() {
   const dbId = AppState.getActiveDatabaseId();
 
+  let editingTemplate = null;
+  const getEditingTemplate = () => editingTemplate;
+  const setEditingTemplate = (t) => { editingTemplate = t; };
+
   let templates = [];
   try {
     templates = await TemplateAPI.getAll(dbId);
@@ -320,7 +324,7 @@ window.showTemplatesModal = async function() {
     return;
   }
 
-  const contentHTML = generateTemplatesModalContent(templates);
+  const contentHTML = generateTemplatesModalContent(templates, null);
   const modal = Modal.create('templates-modal', 'Manage CSV Templates', contentHTML);
   modal.setSubmitText('Create Template');
 
@@ -338,115 +342,195 @@ window.showTemplatesModal = async function() {
     }
 
     try {
-      await TemplateAPI.create(dbId, data);
-      Notification.success('Template created successfully');
+      if (editingTemplate) {
+        await TemplateAPI.update(dbId, { id: editingTemplate.id, ...data });
+        Notification.success('Template updated');
+        setEditingTemplate(null);
+        modal.setSubmitText('Create Template');
+      } else {
+        await TemplateAPI.create(dbId, data);
+        Notification.success('Template created successfully');
+      }
 
-      // Refresh list and update modal content
       const updatedTemplates = await TemplateAPI.getAll(dbId);
-      modal.updateContent(generateTemplatesModalContent(updatedTemplates));
+      modal.updateContent(generateTemplatesModalContent(updatedTemplates, null));
+      setupTemplateItemListeners(dbId, modal, getEditingTemplate, setEditingTemplate);
       return false; // Keep modal open
     } catch (error) {
-      Notification.error('Failed to create template: ' + error.message);
+      Notification.error('Failed to save template: ' + error.message);
       return false;
     }
   });
 
   modal.show();
+  setupTemplateItemListeners(dbId, modal, getEditingTemplate, setEditingTemplate);
 };
 
 /**
  * Generate templates modal content HTML
  */
-function generateTemplatesModalContent(templates) {
+function generateTemplatesModalContent(templates, editingTemplate) {
+  const formTitle = editingTemplate ? 'Edit Template' : 'Create New Template';
+  const t = editingTemplate;
+
   return `
     <div style="margin-bottom: var(--spacing-lg);">
       <h4 style="margin-bottom: var(--spacing-md);">Existing Templates</h4>
       ${templates.length === 0 ? '<p class="text-muted">No templates created yet</p>' : `
         <div style="display: flex; flex-direction: column; gap: var(--spacing-sm);">
-          ${templates.map(t => `
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-sm); border: 1px solid var(--gray-200); border-radius: var(--radius-md);">
+          ${templates.map(tmpl => `
+            <div class="template-item-selectable${editingTemplate && editingTemplate.id === tmpl.id ? ' selected' : ''}"
+                 data-id="${tmpl.id}"
+                 data-name="${tmpl.name.replace(/"/g, '&quot;')}"
+                 data-date-column="${tmpl.dateColumn.replace(/"/g, '&quot;')}"
+                 data-merchant-column="${tmpl.merchantColumn.replace(/"/g, '&quot;')}"
+                 data-amount-column="${tmpl.amountColumn.replace(/"/g, '&quot;')}"
+                 data-date-format="${tmpl.dateFormat}"
+                 data-debit-sign="${tmpl.debitSign || 'positive'}">
               <div>
-                <div style="font-weight: var(--font-weight-medium);">${t.name}</div>
+                <div style="font-weight: var(--font-weight-medium);">${tmpl.name}</div>
                 <div style="font-size: var(--font-size-xs); color: var(--gray-500);">
-                  Date: ${t.dateColumn}, Merchant: ${t.merchantColumn}, Amount: ${t.amountColumn} (debits are ${t.debitSign || 'negative'})
+                  Date: ${tmpl.dateColumn}, Merchant: ${tmpl.merchantColumn}, Amount: ${tmpl.amountColumn} (debits are ${tmpl.debitSign || 'positive'})
                 </div>
               </div>
-              <button class="btn btn-danger btn-small" onclick="deleteTemplate('${t.id}')">Delete</button>
             </div>
           `).join('')}
         </div>
+        <p class="form-hint" style="margin-top: var(--spacing-sm);">Click a template to edit or delete it.</p>
       `}
     </div>
     <div class="divider"></div>
-    <h4 style="margin-bottom: var(--spacing-md);">Create New Template</h4>
-    <form id="template-form">
-      <div class="form-group">
-        <label for="template-name" class="form-label required">Template Name</label>
-        <input type="text" id="template-name" name="name" class="form-input" placeholder="e.g., Chase Sapphire" required>
+    <div id="template-form-section">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--spacing-md);">
+        <h4>${formTitle}</h4>
+        ${editingTemplate ? `<button type="button" class="btn btn-secondary btn-small" id="cancel-template-edit-btn">Cancel</button>` : ''}
       </div>
-      <div class="form-group">
-        <label for="date-column" class="form-label required">Date Column Name</label>
-        <input type="text" id="date-column" name="dateColumn" class="form-input" placeholder="e.g., Transaction Date" required>
-      </div>
-      <div class="form-group">
-        <label for="merchant-column" class="form-label required">Merchant Column Name</label>
-        <input type="text" id="merchant-column" name="merchantColumn" class="form-input" placeholder="e.g., Description" required>
-      </div>
-      <div class="form-group">
-        <label for="amount-column" class="form-label required">Amount Column Name</label>
-        <input type="text" id="amount-column" name="amountColumn" class="form-input" placeholder="e.g., Amount" required>
-      </div>
-      <div class="form-group">
-        <label for="date-format" class="form-label required">Date Format</label>
-        <select id="date-format" name="dateFormat" class="form-select" required>
-          <option value="MM/DD/YYYY">MM/DD/YYYY</option>
-          <option value="DD/MM/YYYY">DD/MM/YYYY</option>
-          <option value="YYYY-MM-DD">YYYY-MM-DD</option>
-          <option value="M/D/YYYY">M/D/YYYY</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label required">Debit Sign in CSV</label>
-        <div style="display: flex; flex-direction: column; gap: var(--spacing-xs); margin-top: var(--spacing-xs);">
-          <label style="display: flex; align-items: center; gap: var(--spacing-sm); cursor: pointer;">
-            <input type="radio" name="debitSign" value="negative">
-            Debits are negative (e.g., -5.75)
-          </label>
-          <label style="display: flex; align-items: center; gap: var(--spacing-sm); cursor: pointer;">
-            <input type="radio" name="debitSign" value="positive" checked>
-            Debits are positive (e.g., 5.75)
-          </label>
+      <form id="template-form">
+        <div class="form-group">
+          <label for="template-name" class="form-label required">Template Name</label>
+          <input type="text" id="template-name" name="name" class="form-input" placeholder="e.g., Chase Sapphire" value="${t ? t.name : ''}" required>
         </div>
-      </div>
-    </form>
+        <div class="form-group">
+          <label for="date-column" class="form-label required">Date Column Name</label>
+          <input type="text" id="date-column" name="dateColumn" class="form-input" placeholder="e.g., Transaction Date" value="${t ? t.dateColumn : ''}" required>
+        </div>
+        <div class="form-group">
+          <label for="merchant-column" class="form-label required">Merchant Column Name</label>
+          <input type="text" id="merchant-column" name="merchantColumn" class="form-input" placeholder="e.g., Description" value="${t ? t.merchantColumn : ''}" required>
+        </div>
+        <div class="form-group">
+          <label for="amount-column" class="form-label required">Amount Column Name</label>
+          <input type="text" id="amount-column" name="amountColumn" class="form-input" placeholder="e.g., Amount" value="${t ? t.amountColumn : ''}" required>
+        </div>
+        <div class="form-group">
+          <label for="date-format" class="form-label required">Date Format</label>
+          <select id="date-format" name="dateFormat" class="form-select" required>
+            <option value="MM/DD/YYYY" ${!t || t.dateFormat === 'MM/DD/YYYY' ? 'selected' : ''}>MM/DD/YYYY</option>
+            <option value="DD/MM/YYYY" ${t && t.dateFormat === 'DD/MM/YYYY' ? 'selected' : ''}>DD/MM/YYYY</option>
+            <option value="YYYY-MM-DD" ${t && t.dateFormat === 'YYYY-MM-DD' ? 'selected' : ''}>YYYY-MM-DD</option>
+            <option value="M/D/YYYY" ${t && t.dateFormat === 'M/D/YYYY' ? 'selected' : ''}>M/D/YYYY</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label required">Debit Sign in CSV</label>
+          <div style="display: flex; flex-direction: column; gap: var(--spacing-xs); margin-top: var(--spacing-xs);">
+            <label style="display: flex; align-items: center; gap: var(--spacing-sm); cursor: pointer;">
+              <input type="radio" name="debitSign" value="negative" ${t && t.debitSign === 'negative' ? 'checked' : ''}>
+              Debits are negative (e.g., -5.75)
+            </label>
+            <label style="display: flex; align-items: center; gap: var(--spacing-sm); cursor: pointer;">
+              <input type="radio" name="debitSign" value="positive" ${!t || t.debitSign === 'positive' ? 'checked' : ''}>
+              Debits are positive (e.g., 5.75)
+            </label>
+          </div>
+        </div>
+      </form>
+    </div>
   `;
 }
 
-/**
- * Delete template
- */
-window.deleteTemplate = async function(templateId) {
-  const dbId = AppState.getActiveDatabaseId();
+let activeTemplateMenu = null;
 
-  if (!confirm('Delete this template?')) return;
-
-  try {
-    await TemplateAPI.delete(dbId, templateId);
-    Notification.success('Template deleted');
-
-    // Refresh list and update modal content
-    const templates = await TemplateAPI.getAll(dbId);
-    const modal = document.querySelector('.modal');
-    if (modal) {
-      const modalBody = modal.querySelector('.modal-body');
-      if (modalBody) {
-        modalBody.innerHTML = generateTemplatesModalContent(templates);
-      }
-    }
-  } catch (error) {
-    Notification.error('Failed to delete template: ' + error.message);
+function closeTemplateMenu() {
+  if (activeTemplateMenu) {
+    activeTemplateMenu.remove();
+    activeTemplateMenu = null;
   }
-};
+  document.querySelectorAll('.template-item-selectable.menu-open').forEach(el => el.classList.remove('menu-open'));
+}
+
+/**
+ * Attach click listeners to template items for the popup menu
+ */
+function setupTemplateItemListeners(dbId, modal, getEditingTemplate, setEditingTemplate) {
+  document.querySelectorAll('.template-item-selectable').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+
+      const alreadyOpen = el.classList.contains('menu-open');
+      closeTemplateMenu();
+      if (alreadyOpen) return;
+
+      el.classList.add('menu-open');
+
+      const template = {
+        id: el.dataset.id,
+        name: el.dataset.name,
+        dateColumn: el.dataset.dateColumn,
+        merchantColumn: el.dataset.merchantColumn,
+        amountColumn: el.dataset.amountColumn,
+        dateFormat: el.dataset.dateFormat,
+        debitSign: el.dataset.debitSign,
+      };
+
+      const menu = document.createElement('div');
+      menu.className = 'category-context-menu';
+      menu.innerHTML = `
+        <button class="category-menu-btn" data-action="edit">Edit</button>
+        <button class="category-menu-btn category-menu-btn--delete" data-action="delete">Delete</button>
+      `;
+      el.appendChild(menu);
+      activeTemplateMenu = menu;
+
+      menu.querySelector('[data-action="edit"]').addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        closeTemplateMenu();
+        setEditingTemplate(template);
+        const templates = await TemplateAPI.getAll(dbId);
+        modal.updateContent(generateTemplatesModalContent(templates, template));
+        modal.setSubmitText('Save Changes');
+        setupTemplateItemListeners(dbId, modal, getEditingTemplate, setEditingTemplate);
+        document.getElementById('cancel-template-edit-btn')?.addEventListener('click', async () => {
+          setEditingTemplate(null);
+          const refreshed = await TemplateAPI.getAll(dbId);
+          modal.updateContent(generateTemplatesModalContent(refreshed, null));
+          modal.setSubmitText('Create Template');
+          setupTemplateItemListeners(dbId, modal, getEditingTemplate, setEditingTemplate);
+        });
+      });
+
+      menu.querySelector('[data-action="delete"]').addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        closeTemplateMenu();
+        if (!confirm('Delete this template?')) return;
+        try {
+          await TemplateAPI.delete(dbId, template.id);
+          Notification.success('Template deleted');
+          if (getEditingTemplate()?.id === template.id) setEditingTemplate(null);
+          const templates = await TemplateAPI.getAll(dbId);
+          modal.updateContent(generateTemplatesModalContent(templates, getEditingTemplate()));
+          modal.setSubmitText(getEditingTemplate() ? 'Save Changes' : 'Create Template');
+          setupTemplateItemListeners(dbId, modal, getEditingTemplate, setEditingTemplate);
+        } catch (error) {
+          Notification.error('Failed to delete template: ' + error.message);
+        }
+      });
+    });
+  });
+
+  // Close menu when clicking outside
+  document.addEventListener('click', closeTemplateMenu, { once: true, capture: true });
+}
 
 const CATEGORY_COLORS = [
   '#EF4444','#DC2626','#F97316','#FB923C','#F59E0B',

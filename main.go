@@ -719,10 +719,35 @@ func handleBackupRoutes(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleTemplateByID handles DELETE for specific template
+// handleTemplateByID handles PUT and DELETE for specific template
 func handleTemplateByID(w http.ResponseWriter, r *http.Request, dbID, templateID string) {
 	debugf("%s /api/databases/%s/templates/%s", r.Method, dbID, templateID)
 	switch r.Method {
+	case http.MethodPut:
+		var template Template
+		if err := json.NewDecoder(r.Body).Decode(&template); err != nil {
+			http.Error(w, "Invalid request body", http.StatusBadRequest)
+			return
+		}
+		template.ID = templateID
+		if strings.TrimSpace(template.Name) == "" {
+			http.Error(w, "Template name is required", http.StatusBadRequest)
+			return
+		}
+		if err := UpdateTemplate(dbID, &template); err != nil {
+			log.Printf("ERROR updating template id=%s db=%s: %v", templateID, dbID, err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		debugf("updated template id=%s db=%s", templateID, dbID)
+		updated, err := GetTemplate(dbID, templateID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(updated)
+
 	case http.MethodDelete:
 		if err := DeleteTemplate(dbID, templateID); err != nil {
 			log.Printf("ERROR deleting template id=%s db=%s: %v", templateID, dbID, err)
