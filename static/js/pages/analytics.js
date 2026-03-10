@@ -133,8 +133,8 @@ function renderStats(transactions) {
 
   const monthTxns = transactions.filter(t => t.date.slice(0, 7) === thisMonth);
 
-  const totalLifetime = transactions.reduce((sum, t) => sum + Math.abs(t.amount), 0);
-  const totalMonth    = monthTxns.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+  const totalLifetime = transactions.reduce((sum, t) => sum + t.amount, 0);
+  const totalMonth    = monthTxns.reduce((sum, t) => sum + t.amount, 0);
 
   document.getElementById('stat-total-lifetime').textContent = formatCurrency(totalLifetime);
   document.getElementById('stat-total-month').textContent    = formatCurrency(totalMonth);
@@ -189,7 +189,7 @@ function renderSpendingOverTime(transactions) {
   const byMonth = {};
   for (const t of transactions) {
     const m = t.date.slice(0, 7);
-    if (months.includes(m)) byMonth[m] = (byMonth[m] || 0) + Math.abs(t.amount);
+    if (months.includes(m)) byMonth[m] = (byMonth[m] || 0) + t.amount;
   }
 
   const totals  = months.map(m => parseFloat((byMonth[m] || 0).toFixed(2)));
@@ -310,7 +310,7 @@ function renderByCategory(transactions, categories) {
       data: months.map(m =>
         parseFloat(transactions
           .filter(t => t.date.slice(0, 7) === m && getCategoryLabel(t, catMap) === label)
-          .reduce((sum, t) => sum + Math.abs(t.amount), 0)
+          .reduce((sum, t) => sum + t.amount, 0)
           .toFixed(2))
       ),
       backgroundColor: colorMap[label] + 'cc',
@@ -349,7 +349,7 @@ function renderBySource(transactions) {
       data: months.map(m =>
         parseFloat(transactions
           .filter(t => t.date.slice(0, 7) === m && (t.source || 'Unknown') === label)
-          .reduce((sum, t) => sum + Math.abs(t.amount), 0)
+          .reduce((sum, t) => sum + t.amount, 0)
           .toFixed(2))
       ),
       backgroundColor: colorMap[label] + 'cc',
