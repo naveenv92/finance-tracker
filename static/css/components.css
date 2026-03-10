@@ -226,7 +226,7 @@
   padding: var(--spacing-xs) var(--spacing-md);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-bold);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-full);
   color: white;
 }
 

@@ -18,17 +18,43 @@
   <link rel="stylesheet" href="css/pages/transactions.css">
 </head>
 <body>
+  <script src="js/core/icons.js"></script>
   <div class="layout">
     <!-- Sidebar -->
     <aside class="sidebar">
-      <div class="sidebar-brand">Finance Tracker</div>
+      <div class="sidebar-logo">FT</div>
       <nav class="sidebar-nav">
-        <a href="dashboard.html">Dashboard</a>
-        <a href="transactions.html" class="active">View Transactions</a>
-        <a href="review.html">Review Transactions</a>
-        <a href="analytics.html">Analytics</a>
-        <a href="settings.html">Settings</a>
-        <a href="index.html">Change Database</a>
+        <div class="sidebar-nav-top">
+          <a href="dashboard.html" class="nav-icon-item" data-tooltip="Dashboard">
+            <svg width="20" height="20" aria-hidden="true"><use href="#icon-dashboard"/></svg>
+          </a>
+          <a href="dashboard.html?modal=import" class="nav-icon-item" data-tooltip="Import CSV">
+            <svg width="20" height="20" aria-hidden="true"><use href="#icon-import"/></svg>
+          </a>
+          <a href="review.html" class="nav-icon-item" data-tooltip="Review Transactions">
+            <svg width="20" height="20" aria-hidden="true"><use href="#icon-review"/></svg>
+          </a>
+          <a href="transactions.html" class="nav-icon-item active" data-tooltip="View Transactions">
+            <svg width="20" height="20" aria-hidden="true"><use href="#icon-transactions"/></svg>
+          </a>
+          <a href="analytics.html" class="nav-icon-item" data-tooltip="Analytics">
+            <svg width="20" height="20" aria-hidden="true"><use href="#icon-analytics"/></svg>
+          </a>
+          <a href="dashboard.html?modal=categories" class="nav-icon-item" data-tooltip="Manage Categories">
+            <svg width="20" height="20" aria-hidden="true"><use href="#icon-categories"/></svg>
+          </a>
+          <a href="dashboard.html?modal=templates" class="nav-icon-item" data-tooltip="Manage Templates">
+            <svg width="20" height="20" aria-hidden="true"><use href="#icon-templates"/></svg>
+          </a>
+        </div>
+        <div class="sidebar-nav-bottom">
+          <a href="index.html" class="nav-icon-item" data-tooltip="Change Database">
+            <svg width="20" height="20" aria-hidden="true"><use href="#icon-change-db"/></svg>
+          </a>
+          <a href="settings.html" class="nav-icon-item" data-tooltip="Settings">
+            <svg width="20" height="20" aria-hidden="true"><use href="#icon-settings"/></svg>
+          </a>
+        </div>
       </nav>
     </aside>
 

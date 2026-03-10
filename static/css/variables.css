@@ -90,7 +90,7 @@
   --transition-slow: 350ms ease-in-out;
 
   /* Layout */
-  --sidebar-width: 260px;
+  --sidebar-width: 64px;
   --max-content-width: 1400px;
   --header-height: 64px;
 

@@ -317,7 +317,7 @@ async function renderTable() {
       label: 'Category',
       render: (categoryId) => {
         if (!categoryId) {
-          return '<span class="badge status-badge">Uncategorized</span>';
+          return '<span class="badge status-badge" style="font-weight:var(--font-weight-bold)">Uncategorized</span>';
         }
         const category = categories.find(c => c.id === categoryId);
         if (!category) return '<span class="badge status-badge">Unknown</span>';

@@ -45,6 +45,12 @@ async function init() {
   await renderStats();
   renderActions();
   setupEventListeners();
+
+  // Auto-open modal from sidebar link (e.g. ?modal=import)
+  const urlModal = new URLSearchParams(window.location.search).get('modal');
+  if (urlModal === 'import') window.showImportCSVModal();
+  else if (urlModal === 'categories') window.showCategoriesModal();
+  else if (urlModal === 'templates') window.showTemplatesModal();
 }
 
 /**
