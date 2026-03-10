@@ -129,20 +129,20 @@ function renderActions() {
       <div class="action-card-title">View Transactions</div>
       <div class="action-card-description">Browse all transactions in table format</div>
     </div>
-    <div class="card action-card" onclick="showTemplatesModal()">
-      <div class="action-card-icon">📋</div>
-      <div class="action-card-title">Manage Templates</div>
-      <div class="action-card-description">Create and manage CSV import templates</div>
+    <div class="card action-card" onclick="window.location.href='analytics.html'">
+      <div class="action-card-icon">📈</div>
+      <div class="action-card-title">Analytics</div>
+      <div class="action-card-description">View spending insights and charts</div>
     </div>
     <div class="card action-card" onclick="showCategoriesModal()">
       <div class="action-card-icon">🏷️</div>
       <div class="action-card-title">Manage Categories</div>
       <div class="action-card-description">Create and organize transaction categories</div>
     </div>
-    <div class="card action-card" onclick="window.location.href='analytics.html'">
-      <div class="action-card-icon">📈</div>
-      <div class="action-card-title">Analytics</div>
-      <div class="action-card-description">View spending insights and charts</div>
+    <div class="card action-card" onclick="showTemplatesModal()">
+      <div class="action-card-icon">📋</div>
+      <div class="action-card-title">Manage Templates</div>
+      <div class="action-card-description">Create and manage CSV import templates</div>
     </div>
   `;
 

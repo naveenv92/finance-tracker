@@ -154,6 +154,11 @@ p {
   opacity: 1;
 }
 
+.nav-icon-item.tooltip-left::after {
+  left: auto;
+  right: calc(100% + 10px);
+}
+
 .main-content {
   flex: 1;
   padding: var(--spacing-2xl);

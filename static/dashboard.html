@@ -65,8 +65,12 @@
           <p class="dashboard-db-name" id="db-name"></p>
         </div>
         <div style="display:flex;gap:var(--spacing-sm);">
-          <a href="settings.html" class="btn btn-secondary">Database Settings</a>
-          <button class="btn btn-secondary" id="change-db-btn">Change Database</button>
+          <button class="nav-icon-item tooltip-left" id="change-db-btn" data-tooltip="Change Database">
+            <svg width="20" height="20" aria-hidden="true"><use href="#icon-change-db"/></svg>
+          </button>
+          <a href="settings.html" class="nav-icon-item tooltip-left" data-tooltip="Settings">
+            <svg width="20" height="20" aria-hidden="true"><use href="#icon-settings"/></svg>
+          </a>
         </div>
       </div>
 
