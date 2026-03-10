@@ -60,7 +60,7 @@
       '<path d="M6 3v9c0 1.1 2.69 2 6 2s6-0.9 6-2V3"/>',
       '<path d="M6 8c0 1.1 2.69 2 6 2s6-0.9 6-2"/>',
       '<!-- Double-headed arrow fully below the DB -->',
-      '<path d="M-3,20 L7,16 L7,18.5 L17,18.5 L17,16 L27,20 L17,24 L17,21.5 L7,21.5 L7,24 Z" fill="var(--white)" stroke-linejoin="miter"/>',
+      '<path d="M-3,20 L3,16 L3,18.5 L21,18.5 L21,16 L27,20 L21,24 L21,21.5 L3,21.5 L3,24 Z" fill="var(--white)" stroke-linejoin="miter"/>',
     '</symbol>',
 
     '<symbol id="icon-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">',
