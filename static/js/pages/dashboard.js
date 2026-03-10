@@ -442,83 +442,110 @@ window.deleteTemplate = async function(templateId) {
   }
 };
 
+const CATEGORY_COLORS = [
+  '#EF4444','#DC2626','#F97316','#FB923C','#F59E0B',
+  '#FBBF24','#EAB308','#84CC16','#A3E635','#22C55E',
+  '#16A34A','#10B981','#34D399','#14B8A6','#2DD4BF',
+  '#06B6D4','#0EA5E9','#3B82F6','#60A5FA','#6366F1',
+  '#818CF8','#8B5CF6','#A855F7','#C084FC','#EC4899',
+  '#F472B6','#F43F5E','#FB7185','#78716C','#6B7280',
+];
+
+const EMOJI_SECTIONS = [
+  { label: 'Food & Drink', emojis: ['🍔','🍕','🍜','🍣','🌮','🥗','☕','🍺','🍷','🥤','🍰','🛒'] },
+  { label: 'Transport',    emojis: ['🚗','🚌','✈️','🚂','🚕','🛵','🚲','⛽','🅿️','🛳️'] },
+  { label: 'Shopping',     emojis: ['🛍️','👗','👟','💄','🎮','📱','💻','📷','🎁','💍'] },
+  { label: 'Home',         emojis: ['🏠','🔧','💡','📦','🧹','🪴','🛋️','🔑','🪣'] },
+  { label: 'Health',       emojis: ['💊','🏥','🏋️','🧴','🩺','🦷','🧘','🩹'] },
+  { label: 'Entertainment',emojis: ['🎬','🎵','🎮','📚','🎭','🎨','🎯','🎪','🎤'] },
+  { label: 'Finance',      emojis: ['💰','💳','💵','📈','🏦','💹','🧾','📊','🪙'] },
+  { label: 'Utilities',    emojis: ['📱','🌐','🔌','📡','💧','🔥','♻️'] },
+  { label: 'People',       emojis: ['👤','👨‍👩‍👧','🧑‍💼','👶','🐶','🐱'] },
+  { label: 'Other',        emojis: ['⭐','✅','❗','🔴','🟢','🔵','⚡','🎯','📝','🗓️'] },
+];
+
+function buildColorSwatches(selectedColor = null) {
+  return `<div class="color-swatches">
+    ${CATEGORY_COLORS.map((c, i) => `
+      <label class="color-swatch-label" title="${c}">
+        <input type="radio" name="color" value="${c}" ${(selectedColor ? c === selectedColor : i === 0) ? 'checked' : ''} required>
+        <span class="color-swatch" style="background:${c};"></span>
+      </label>
+    `).join('')}
+  </div>`;
+}
+
+function buildEmojiPickerHTML(prefillEmoji = '') {
+  return `
+    <div style="position: relative;">
+      <div style="display: flex; gap: var(--spacing-sm);">
+        <input type="text" id="category-emoji" name="emoji" class="form-input" placeholder="" maxlength="2" style="flex: 1;" readonly value="${prefillEmoji}">
+        <button type="button" class="btn btn-secondary" onclick="toggleEmojiPicker()" style="white-space: nowrap;">Pick Emoji</button>
+        <button type="button" class="btn btn-secondary" onclick="clearEmoji()" style="white-space: nowrap;">Clear</button>
+      </div>
+      <div id="emoji-picker" style="display: none; position: absolute; top: calc(100% + 4px); left: 0; z-index: 1000; background: white; border: 1px solid var(--gray-200); border-radius: var(--radius-md); padding: var(--spacing-sm); width: 300px; max-height: 220px; overflow-y: auto; box-shadow: var(--shadow-lg);">
+        ${EMOJI_SECTIONS.map(section => `
+          <div style="margin-bottom: var(--spacing-sm);">
+            <div style="font-size: var(--font-size-xs); color: var(--gray-500); margin-bottom: 2px; font-weight: var(--font-weight-medium);">${section.label}</div>
+            <div style="display: flex; flex-wrap: wrap; gap: 1px;">
+              ${section.emojis.map(e => `<button type="button" title="${e}" onclick="selectEmoji('${e}')" style="background: none; border: none; font-size: 20px; cursor: pointer; padding: 3px 5px; border-radius: var(--radius-sm);" onmouseover="this.style.background='var(--gray-100)'" onmouseout="this.style.background='none'">${e}</button>`).join('')}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>`;
+}
+
 /**
  * Generate categories modal content HTML
  */
-function generateCategoriesModalContent(categories) {
+function generateCategoriesModalContent(categories, editingCategory = null) {
+  const formTitle = editingCategory ? 'Edit Category' : 'Create New Category';
+  const namePrefill = editingCategory ? editingCategory.name : '';
+  const colorPrefill = editingCategory ? editingCategory.color : null;
+  const emojiPrefill = editingCategory ? (editingCategory.emoji || '') : '';
+
   return `
     <div style="margin-bottom: var(--spacing-lg);">
       <h4 style="margin-bottom: var(--spacing-md);">Existing Categories</h4>
       ${categories.length === 0 ? '<p class="text-muted">No categories created yet</p>' : `
         <div style="display: flex; flex-wrap: wrap; gap: var(--spacing-sm);">
           ${categories.map(c => `
-            <div style="display: flex; align-items: center; gap: var(--spacing-sm); padding: var(--spacing-sm) var(--spacing-md); border: 1px solid var(--gray-200); border-radius: var(--radius-md);">
-              <span class="category-badge" style="background-color: ${c.color};">
+            <div class="category-item-selectable${editingCategory && editingCategory.id === c.id ? ' selected' : ''}"
+                 data-id="${c.id}"
+                 data-name="${c.name.replace(/"/g, '&quot;')}"
+                 data-color="${c.color}"
+                 data-emoji="${(c.emoji || '').replace(/"/g, '&quot;')}">
+              <span class="category-badge" style="background-color: ${c.color}; cursor: pointer;">
                 ${c.emoji || ''} ${c.name}
               </span>
-              <button class="btn btn-danger btn-small" onclick="deleteCategory('${c.id}')" style="width:22px;height:22px;border-radius:50%;padding:0;line-height:1;flex-shrink:0;">✕</button>
             </div>
           `).join('')}
         </div>
+        <p class="form-hint" style="margin-top: var(--spacing-sm);">Click a category to edit or delete it.</p>
       `}
     </div>
     <div class="divider"></div>
-    <h4 style="margin-bottom: var(--spacing-md);">Create New Category</h4>
-    <form id="category-form">
-      <div class="form-group">
-        <label for="category-name" class="form-label required">Category Name</label>
-        <input type="text" id="category-name" name="name" class="form-input" placeholder="e.g., Food & Dining" required>
+    <div id="category-form-section">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--spacing-md);">
+        <h4>${formTitle}</h4>
+        ${editingCategory ? `<button type="button" class="btn btn-secondary btn-small" id="cancel-edit-btn">Cancel</button>` : ''}
       </div>
-      <div class="form-group">
-        <label class="form-label required">Color</label>
-        <div class="color-swatches">
-          ${[
-            '#EF4444','#DC2626','#F97316','#FB923C','#F59E0B',
-            '#FBBF24','#EAB308','#84CC16','#A3E635','#22C55E',
-            '#16A34A','#10B981','#34D399','#14B8A6','#2DD4BF',
-            '#06B6D4','#0EA5E9','#3B82F6','#60A5FA','#6366F1',
-            '#818CF8','#8B5CF6','#A855F7','#C084FC','#EC4899',
-            '#F472B6','#F43F5E','#FB7185','#78716C','#6B7280',
-          ].map((c, i) => `
-            <label class="color-swatch-label" title="${c}">
-              <input type="radio" name="color" value="${c}" ${i === 0 ? 'checked' : ''} required>
-              <span class="color-swatch" style="background:${c};"></span>
-            </label>
-          `).join('')}
+      <form id="category-form">
+        <div class="form-group">
+          <label for="category-name" class="form-label required">Category Name</label>
+          <input type="text" id="category-name" name="name" class="form-input" placeholder="e.g., Food & Dining" value="${namePrefill}" required>
         </div>
-      </div>
-      <div class="form-group">
-        <label for="category-emoji" class="form-label">Emoji (optional)</label>
-        <div style="position: relative;">
-          <div style="display: flex; gap: var(--spacing-sm);">
-            <input type="text" id="category-emoji" name="emoji" class="form-input" placeholder="" maxlength="2" style="flex: 1;" readonly>
-            <button type="button" class="btn btn-secondary" onclick="toggleEmojiPicker()" style="white-space: nowrap;">Pick Emoji</button>
-            <button type="button" class="btn btn-secondary" onclick="clearEmoji()" style="white-space: nowrap;">Clear</button>
-          </div>
-          <div id="emoji-picker" style="display: none; position: absolute; top: calc(100% + 4px); left: 0; z-index: 1000; background: white; border: 1px solid var(--gray-200); border-radius: var(--radius-md); padding: var(--spacing-sm); width: 300px; max-height: 220px; overflow-y: auto; box-shadow: var(--shadow-lg);">
-            ${[
-              { label: 'Food & Drink', emojis: ['🍔','🍕','🍜','🍣','🌮','🥗','☕','🍺','🍷','🥤','🍰','🛒'] },
-              { label: 'Transport',   emojis: ['🚗','🚌','✈️','🚂','🚕','🛵','🚲','⛽','🅿️','🛳️'] },
-              { label: 'Shopping',    emojis: ['🛍️','👗','👟','💄','🎮','📱','💻','📷','🎁','💍'] },
-              { label: 'Home',        emojis: ['🏠','🔧','💡','📦','🧹','🪴','🛋️','🔑','🪣'] },
-              { label: 'Health',      emojis: ['💊','🏥','🏋️','🧴','🩺','🦷','🧘','🩹'] },
-              { label: 'Entertainment', emojis: ['🎬','🎵','🎮','📚','🎭','🎨','🎯','🎪','🎤'] },
-              { label: 'Finance',     emojis: ['💰','💳','💵','📈','🏦','💹','🧾','📊','🪙'] },
-              { label: 'Utilities',   emojis: ['📱','🌐','🔌','📡','💧','🔥','♻️'] },
-              { label: 'People',      emojis: ['👤','👨‍👩‍👧','🧑‍💼','👶','🐶','🐱'] },
-              { label: 'Other',       emojis: ['⭐','✅','❗','🔴','🟢','🔵','⚡','🎯','📝','🗓️'] },
-            ].map(section => `
-              <div style="margin-bottom: var(--spacing-sm);">
-                <div style="font-size: var(--font-size-xs); color: var(--gray-500); margin-bottom: 2px; font-weight: var(--font-weight-medium);">${section.label}</div>
-                <div style="display: flex; flex-wrap: wrap; gap: 1px;">
-                  ${section.emojis.map(e => `<button type="button" title="${e}" onclick="selectEmoji('${e}')" style="background: none; border: none; font-size: 20px; cursor: pointer; padding: 3px 5px; border-radius: var(--radius-sm);" onmouseover="this.style.background='var(--gray-100)'" onmouseout="this.style.background='none'">${e}</button>`).join('')}
-                </div>
-              </div>
-            `).join('')}
-          </div>
+        <div class="form-group">
+          <label class="form-label required">Color</label>
+          ${buildColorSwatches(colorPrefill)}
         </div>
-      </div>
-    </form>
+        <div class="form-group">
+          <label for="category-emoji" class="form-label">Emoji (optional)</label>
+          ${buildEmojiPickerHTML(emojiPrefill)}
+        </div>
+      </form>
+    </div>
   `;
 }
 
@@ -567,16 +594,103 @@ function setupColorSync() {
   }
 }
 
+let activeCategoryMenu = null;
+
+function closeCategoryMenu() {
+  if (activeCategoryMenu) {
+    activeCategoryMenu.remove();
+    activeCategoryMenu = null;
+  }
+  document.querySelectorAll('.category-item-selectable.menu-open').forEach(el => el.classList.remove('menu-open'));
+}
+
+/**
+ * Attach click listeners to category items for the popup menu
+ */
+function setupCategoryItemListeners(dbId, modal, getEditingCategory, setEditingCategory) {
+  document.querySelectorAll('.category-item-selectable').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+
+      const alreadyOpen = el.classList.contains('menu-open');
+      closeCategoryMenu();
+      if (alreadyOpen) return;
+
+      el.classList.add('menu-open');
+
+      const category = {
+        id: el.dataset.id,
+        name: el.dataset.name,
+        color: el.dataset.color,
+        emoji: el.dataset.emoji,
+      };
+
+      const menu = document.createElement('div');
+      menu.className = 'category-context-menu';
+      menu.innerHTML = `
+        <button class="category-menu-btn" data-action="edit">Edit</button>
+        <button class="category-menu-btn category-menu-btn--delete" data-action="delete">Delete</button>
+      `;
+      el.appendChild(menu);
+      activeCategoryMenu = menu;
+
+      menu.querySelector('[data-action="edit"]').addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        closeCategoryMenu();
+        setEditingCategory(category);
+        const categories = await CategoryAPI.getAll(dbId);
+        modal.updateContent(generateCategoriesModalContent(categories, category));
+        modal.setSubmitText('Save Changes');
+        setupCategoryItemListeners(dbId, modal, getEditingCategory, setEditingCategory);
+        setupColorSync();
+        document.getElementById('cancel-edit-btn')?.addEventListener('click', async () => {
+          setEditingCategory(null);
+          const refreshed = await CategoryAPI.getAll(dbId);
+          modal.updateContent(generateCategoriesModalContent(refreshed, null));
+          modal.setSubmitText('Create Category');
+          setupCategoryItemListeners(dbId, modal, getEditingCategory, setEditingCategory);
+          setupColorSync();
+        });
+      });
+
+      menu.querySelector('[data-action="delete"]').addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        closeCategoryMenu();
+        if (!confirm('Delete this category? This will remove it from all transactions.')) return;
+        try {
+          await CategoryAPI.delete(dbId, category.id);
+          Notification.success('Category deleted');
+          if (getEditingCategory()?.id === category.id) setEditingCategory(null);
+          const categories = await CategoryAPI.getAll(dbId);
+          modal.updateContent(generateCategoriesModalContent(categories, getEditingCategory()));
+          modal.setSubmitText(getEditingCategory() ? 'Save Changes' : 'Create Category');
+          setupCategoryItemListeners(dbId, modal, getEditingCategory, setEditingCategory);
+          setupColorSync();
+        } catch (error) {
+          Notification.error('Failed to delete category: ' + error.message);
+        }
+      });
+    });
+  });
+
+  // Close menu when clicking outside
+  document.addEventListener('click', closeCategoryMenu, { once: true, capture: true });
+}
+
 /**
  * Show categories management modal
  */
 window.showCategoriesModal = async function() {
   const dbId = AppState.getActiveDatabaseId();
 
+  let editingCategory = null;
+  const getEditingCategory = () => editingCategory;
+  const setEditingCategory = (c) => { editingCategory = c; };
+
   try {
     const categories = await CategoryAPI.getAll(dbId);
 
-    const contentHTML = generateCategoriesModalContent(categories);
+    const contentHTML = generateCategoriesModalContent(categories, null);
     const modal = Modal.create('categories-modal', 'Manage Categories', contentHTML);
     modal.setSubmitText('Create Category');
 
@@ -587,74 +701,48 @@ window.showCategoriesModal = async function() {
       const formData = new FormData(form);
       const data = Object.fromEntries(formData);
 
-      // Validate
       if (!isValidCategoryName(data.name) || !isValidHexColor(data.color) || !isValidEmoji(data.emoji)) {
         Notification.error('Please fill in all fields correctly');
         return false;
       }
 
       try {
-        await CategoryAPI.create(dbId, {
-          name: data.name,
-          color: data.color.toUpperCase(),
-          emoji: data.emoji
-        });
-
-        Notification.success('Category created successfully');
-
-        // Refresh categories and update modal content
-        const updatedCategories = await CategoryAPI.getAll(dbId);
-        modal.updateContent(generateCategoriesModalContent(updatedCategories));
-
-        setupColorSync();
-
-        // Reset the form
-        const newForm = document.getElementById('category-form');
-        if (newForm) {
-          newForm.reset();
-          const ci = document.getElementById('category-color');
-          const chi = document.getElementById('category-color-hex');
-          if (ci) ci.value = '#FF6B6B';
-          if (chi) chi.value = '#FF6B6B';
+        if (editingCategory) {
+          // Edit mode
+          await CategoryAPI.update(dbId, {
+            id: editingCategory.id,
+            name: data.name,
+            color: data.color.toUpperCase(),
+            emoji: data.emoji,
+          });
+          Notification.success('Category updated');
+          setEditingCategory(null);
+          modal.setSubmitText('Create Category');
+        } else {
+          // Create mode
+          await CategoryAPI.create(dbId, {
+            name: data.name,
+            color: data.color.toUpperCase(),
+            emoji: data.emoji,
+          });
+          Notification.success('Category created successfully');
         }
 
-        return false; // Don't close modal
+        const updatedCategories = await CategoryAPI.getAll(dbId);
+        modal.updateContent(generateCategoriesModalContent(updatedCategories, null));
+        setupCategoryItemListeners(dbId, modal, getEditingCategory, setEditingCategory);
+        setupColorSync();
+        return false; // Keep modal open
       } catch (error) {
-        Notification.error('Failed to create category: ' + error.message);
+        Notification.error('Failed to save category: ' + error.message);
         return false;
       }
     });
 
     setupColorSync();
     modal.show();
+    setupCategoryItemListeners(dbId, modal, getEditingCategory, setEditingCategory);
   } catch (error) {
     Notification.error('Failed to load categories: ' + error.message);
-  }
-};
-
-/**
- * Delete category
- */
-window.deleteCategory = async function(categoryId) {
-  const dbId = AppState.getActiveDatabaseId();
-
-  if (!confirm('Delete this category?')) return;
-
-  try {
-    await CategoryAPI.delete(dbId, categoryId);
-    Notification.success('Category deleted');
-
-    // Refresh categories and update modal content
-    const categories = await CategoryAPI.getAll(dbId);
-    const modal = document.querySelector('.modal');
-    if (modal) {
-      const modalBody = modal.querySelector('.modal-body');
-      if (modalBody) {
-        modalBody.innerHTML = generateCategoriesModalContent(categories);
-        setupColorSync();
-      }
-    }
-  } catch (error) {
-    Notification.error('Failed to delete category: ' + error.message);
   }
 };

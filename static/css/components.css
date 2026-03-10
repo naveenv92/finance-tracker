@@ -391,3 +391,62 @@
 .color-swatch-label input[type="radio"]:checked + .color-swatch {
   outline-color: var(--gray-700);
 }
+
+/* Category item selectable (in Manage Categories modal) */
+.category-item-selectable {
+  position: relative;
+  display: inline-flex;
+}
+
+.category-item-selectable .category-badge {
+  transition: box-shadow 0.15s, outline 0.15s;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+.category-item-selectable.menu-open .category-badge,
+.category-item-selectable.selected .category-badge {
+  outline-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--focus-ring-color);
+}
+
+/* Category context menu popup */
+.category-context-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  min-width: 100px;
+  overflow: hidden;
+}
+
+.category-menu-btn {
+  background: none;
+  border: none;
+  padding: var(--spacing-sm) var(--spacing-md);
+  text-align: left;
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--gray-700);
+  white-space: nowrap;
+}
+
+.category-menu-btn:hover {
+  background: var(--gray-50);
+}
+
+.category-menu-btn--delete {
+  color: var(--color-error);
+}
+
+.category-menu-btn--delete:hover {
+  background: var(--color-error-light);
+}

@@ -274,10 +274,29 @@ func handleCategories(w http.ResponseWriter, r *http.Request, dbID string) {
 	}
 }
 
-// handleCategoryByID handles DELETE for specific category
+// handleCategoryByID handles PUT and DELETE for specific category
 func handleCategoryByID(w http.ResponseWriter, r *http.Request, dbID, categoryID string) {
 	debugf("%s /api/databases/%s/categories/%s", r.Method, dbID, categoryID)
 	switch r.Method {
+	case http.MethodPut:
+		var category Category
+		if err := json.NewDecoder(r.Body).Decode(&category); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(category.Name) == "" {
+			http.Error(w, "Category name is required", http.StatusBadRequest)
+			return
+		}
+		updated, err := UpdateCategory(dbID, categoryID, &category)
+		if err != nil {
+			log.Printf("ERROR updating category id=%s db=%s: %v", categoryID, dbID, err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		debugf("updated category id=%s db=%s", categoryID, dbID)
+		json.NewEncoder(w).Encode(updated)
+
 	case http.MethodDelete:
 		if err := DeleteCategory(dbID, categoryID); err != nil {
 			log.Printf("ERROR deleting category id=%s db=%s: %v", categoryID, dbID, err)

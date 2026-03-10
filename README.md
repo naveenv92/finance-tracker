@@ -10,7 +10,8 @@ A lightweight personal finance tracker with a vanilla JavaScript frontend and Go
 - **Manual Transactions**: Add one-off transactions directly from the Transactions page; source defaults to "Manual" but can be set to any existing source in the database
 - **Transaction Review**: One-by-one workflow to categorize, rename merchants, and split costs
 - **Bulk Editing**: Select multiple transactions and bulk-update category or reviewed status
-- **Categories**: Custom categories with colors and emojis
+- **Categories**: Custom categories with colors and emojis; click any existing category to edit or delete it via a popup menu
+- **Themes**: Four built-in UI themes (Default, Vibrant, Pastel, Dark) selectable from Settings
 - **Transaction Splitting**: Split costs between multiple people with dollar or percentage amounts; owner auto-split recalculates as remainder
 - **Analytics**: Spending over time, by category, and by source — charts with per-person filtering
 - **Search & Filter**: Filter by category, person, date range, and amount range
@@ -38,9 +39,10 @@ go build -o finance-tracker && ./finance-tracker  # production binary
 2. **Set your name** in Settings → Database Settings (required for the review workflow)
 3. **Create a CSV template** in Settings → Manage Templates — map your bank's column headers and date format; set debit sign if amounts are negative
 4. **Import transactions** via Dashboard → Import CSV
-5. **Create categories** in Settings → Manage Categories
+5. **Create categories** in Settings → Manage Categories; click any existing category badge to edit or delete it
 6. **Review transactions** via Dashboard → Review Transactions — assign categories, edit merchants, split costs
 7. **View & analyze** via the Transactions and Analytics pages
+8. **Customize the theme** in Settings → Theme (Default, Vibrant, Pastel, Dark)
 
 ## Architecture
 
@@ -85,7 +87,7 @@ GET/POST           /api/databases
 GET/DELETE         /api/databases/:id
 
 GET/POST           /api/databases/:id/categories
-DELETE             /api/databases/:id/categories/:categoryId
+PUT/DELETE         /api/databases/:id/categories/:categoryId
 
 GET/POST           /api/databases/:id/transactions
 POST               /api/databases/:id/transactions/import

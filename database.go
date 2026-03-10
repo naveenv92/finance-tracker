@@ -347,6 +347,24 @@ func GetCategory(databaseID, categoryID string) (*Category, error) {
 	return &c, nil
 }
 
+// UpdateCategory updates a category's name, color, and emoji
+func UpdateCategory(databaseID, categoryID string, category *Category) (*Category, error) {
+	query := `UPDATE categories SET name = ?, color = ?, emoji = ? WHERE id = ? AND database_id = ?`
+	result, err := db.Exec(query, category.Name, category.Color, category.Emoji, categoryID, databaseID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update category: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	if rows == 0 {
+		return nil, fmt.Errorf("category not found")
+	}
+	UpdateDatabaseTimestamp(databaseID)
+	return GetCategory(databaseID, categoryID)
+}
+
 // DeleteCategory deletes a category and nulls out its references in transactions
 func DeleteCategory(databaseID, categoryID string) error {
 	_, err := db.Exec(`UPDATE transactions SET category_id = NULL WHERE category_id = ? AND database_id = ?`, categoryID, databaseID)

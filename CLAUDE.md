@@ -2,216 +2,129 @@
 
 ## Project Overview
 
-**Finance Tracker** is a personal finance app (vanilla JS + Go + SQLite). Users import bank CSVs, categorize transactions, split costs between people, and manage multiple finance databases.
-
-**Status**: ✅ Fully implemented. Go backend on `localhost:8080`, SQLite at `~/.finance-tracker/data.db`, all frontend assets embedded in binary.
+**Finance Tracker** — personal finance app (vanilla JS + Go + SQLite). Import bank CSVs, categorize transactions, split costs between people, manage multiple databases.
 
 **Stack**: Vanilla JS (ES6 modules), Custom CSS, Go 1.21+ (net/http), SQLite3
+**Server**: `localhost:8080` | **DB**: `~/.finance-tracker/data.db` | frontend assets embedded in binary
 
 ## Architecture
 
-### Module Organization
-```
-static/
-├── js/
-│   ├── core/       # storage.js, database.js, state.js, api.js
-│   ├── utils/      # helpers.js, validators.js, date-formatter.js, csv-parser.js
-│   ├── components/ # modal.js, notification.js, table.js
-│   └── pages/      # landing.js, dashboard.js, transactions.js, review.js, settings.js, analytics.js
-└── css/            # reset, variables, global, components, modals, table, per-page styles
-```
-
-### File Structure
 ```
 finance/
-├── static/         # Embedded frontend (embed.FS)
-├── main.go         # HTTP server, routing, handlers
-├── database.go     # SQLite CRUD, schema
-├── backup.go       # Backup/restore logic
-└── go.mod
+├── main.go       # HTTP server, routing, handlers
+├── database.go   # SQLite schema + CRUD
+├── backup.go     # Backup/restore logic
+└── static/       # Embedded frontend (embed.FS)
+    ├── *.html    # index, dashboard, transactions, review, settings, analytics
+    ├── css/      # reset, variables, global, components, modals, table, per-page
+    └── js/
+        ├── core/       # api.js, state.js, storage.js, database.js
+        ├── utils/      # helpers.js, validators.js, date-formatter.js, csv-parser.js
+        ├── components/ # modal.js, notification.js, table.js
+        └── pages/      # landing, dashboard, transactions, review, settings, analytics
 
 ~/.finance-tracker/
 ├── data.db
-├── backups/        # JSON backup files
+├── backups/      # JSON backup files
 └── logs/server-YYYY-MM-DD.log
 ```
 
-### Design Patterns
-- ES6 Modules with explicit imports
-- Static classes: `DatabaseManager`, `StorageManager`, `AppState`
-- Instantiable components: `Modal`, `Notification`, `Table`
-- `AppState.requireActiveDatabase()` guard on all pages except landing
-- localStorage holds only `financeTracker:activeDb` (session pointer); all data in SQLite
+**Design patterns**: ES6 modules, static classes (`DatabaseManager`, `StorageManager`, `AppState`), instantiable components (`Modal`, `Notification`, `Table`). `AppState.requireActiveDatabase()` guard on all pages except landing. `localStorage` holds only `financeTracker:activeDb`; all data in SQLite.
 
 ## Data Models
 
 ```javascript
-// Database
-{ id, name, createdAt, lastModified }
-
-// Transaction
-{ id, date, merchant, originalMerchant, amount, categoryId, splits, reviewed, importedAt, notes, source, possibleDuplicate }
-// splits: [{ personName, amount }] — stored as JSON string in SQLite
-// source: name of CSV template used during import
-// possibleDuplicate: true when imported transaction matches existing date|originalMerchant|amount
-
-// Category
-{ id, name, color, emoji, createdAt }
-// Deleting a category nulls out categoryId on all referencing transactions
-
-// Template
-{ id, name, dateColumn, merchantColumn, amountColumn, dateFormat, debitSign, createdAt }
-// debitSign: "positive" | "negative" — if "negative", amounts * -1 on import
-
-// DatabaseSettings
-{ databaseId, ownerName }
+{ id, name, createdAt, lastModified }                          // Database
+{ id, date, merchant, originalMerchant, amount, categoryId,   // Transaction
+  splits,            // [{ personName, amount }] — JSON string in SQLite
+  reviewed,          // true = visible on Transactions page
+  notes, source, importedAt, possibleDuplicate }
+{ id, name, color, emoji, createdAt }                         // Category (delete nulls categoryId on transactions)
+{ id, name, dateColumn, merchantColumn, amountColumn,         // Template
+  dateFormat, debitSign, createdAt }  // debitSign: "positive"|"negative"
+{ databaseId, ownerName }                                     // DatabaseSettings
 ```
 
 ## API Endpoints
 
 ```
-GET    /api/databases
-POST   /api/databases
-GET    /api/databases/:id
-DELETE /api/databases/:id
+GET/POST            /api/databases
+GET/DELETE          /api/databases/:id
 
-GET    /api/databases/:id/categories
-POST   /api/databases/:id/categories
-DELETE /api/databases/:id/categories/:categoryId
+GET/POST            /api/databases/:id/categories
+PUT/DELETE          /api/databases/:id/categories/:categoryId
 
-GET    /api/databases/:id/transactions
-POST   /api/databases/:id/transactions
-POST   /api/databases/:id/transactions/import        (bulk import, dedup by date|merchant|amount)
-GET    /api/databases/:id/transactions/export        (?start=&end=&filename=)
-PUT    /api/databases/:id/transactions/:transactionId
-DELETE /api/databases/:id/transactions/:transactionId
+GET/POST            /api/databases/:id/transactions
+POST                /api/databases/:id/transactions/import        (bulk; dedup by date|merchant|amount)
+GET                 /api/databases/:id/transactions/export        (?start=&end=&filename=)
+PUT/DELETE          /api/databases/:id/transactions/:transactionId
 
-GET    /api/databases/:id/templates
-POST   /api/databases/:id/templates
-DELETE /api/databases/:id/templates/:templateId
+GET/POST            /api/databases/:id/templates
+DELETE              /api/databases/:id/templates/:templateId
 
-GET    /api/databases/:id/settings
-PUT    /api/databases/:id/settings
+GET/PUT             /api/databases/:id/settings
+POST                /api/databases/:id/backup
 
-POST   /api/databases/:id/backup                     (creates JSON backup)
-GET    /api/backups                                  (list all backups)
-DELETE /api/backups/:filename
-POST   /api/backups/:filename/restore                (creates new DB from backup)
+GET                 /api/backups
+DELETE              /api/backups/:filename
+POST                /api/backups/:filename/restore
 ```
 
-## State Management (async)
+## State Management
 
 ```javascript
-await AppState.setActiveDatabase(dbId);   // verifies via backend
+await AppState.setActiveDatabase(dbId);    // verifies via backend
 const db = await AppState.getActiveDatabase(); // fetches from backend
 const id = AppState.getActiveDatabaseId(); // sync, reads localStorage
 AppState.requireActiveDatabase();          // sync guard, redirects to index.html
 ```
 
-## Key Features & Implementation Notes
+## Key Implementation Notes
 
-### Review Page
-- Requires `ownerName` in settings; redirects to settings if unset
-- First split is auto (owner, 100%, `data-auto="true"`, readonly) — recalculates live as other splits change
-- New splits default to Percentage type, pre-filled with `100 / totalPeople`%
-- `getSplitsFromForm` handles auto splits (no typeSelect) by reading dollar amount directly
+**Review page**: Requires `ownerName` in settings (redirects if unset). First split is auto (owner, readonly, recalculates as remainder). New splits default to percentage, pre-filled with `100 / totalPeople`%. `getSplitsFromForm` reads auto split dollar amount directly.
 
-### Transactions Page
-- Shows only `reviewed === true` transactions
-- Filters: Category + Person (row 1), Start/End Date (row 2), Amount slider (row 3)
-- Person filter shows individual split amount; `(split)` label when >1 person in splits
-- "+" button opens Add Transaction modal: date, merchant, amount, category, source (dropdown of existing sources, defaults to "Manual"), notes, splits; `reviewed: true`
-- Split behavior matches Review page: first split is auto (owner, `data-auto="true"`, readonly, recalculates as remainder); additional splits have dollar/percentage type selector
-- `ownerName` loaded at init from settings; pre-filled as auto split in both Add and Edit modals
-- Bulk editing: checkbox column selects rows; action bar appears to bulk-set category or reviewed status
+**Transactions page**: Shows only `reviewed === true`. Filters: Category + Person / Date range / Amount slider. Person filter shows individual split amount with `(split)` label. "+" button adds manual transaction (`reviewed: true`, source defaults to "Manual"). Bulk editing via checkbox column → action bar for category/reviewed.
 
-### Analytics Page (Chart.js CDN)
-- Stats: Total Spent Lifetime, Total Spent This Month, Avg/Day Lifetime, Avg/Day This Month (2×2 layout)
-  - Lifetime avg/day: total / days between min and max transaction date
-  - Monthly avg/day: month total / days between min and max transaction date in that month
-- Spending Over Time: grouped bar chart, last 12 calendar months; left axis = total spent, right axis = avg/day (total / days in that calendar month)
-- By Category: stacked bar chart, last 12 months, one dataset per category; interactive checkbox legend to toggle categories
-- By Source: same as By Category but grouped by transaction source
-- Filter: Person only — applies to all charts; uses individual split amount when person is selected; resets category/source toggles on change
-- All amounts use `Math.abs()`; chart instances stored in `chartInstances` map, destroyed before re-render
-- `disabledCategories` / `disabledSources` (module-level Sets) track toggled-off labels; stable color assignment based on sorted label order
+**Categories (Manage Categories modal)**: Click a category badge to open an Edit/Delete popup menu. Edit pre-fills the bottom form and switches submit to "Save Changes". Cancel reverts to create mode. Deleting a category nulls it on all transactions. `setupCategoryItemListeners` must be called **after** `modal.show()` so the DOM exists.
 
-### CSV Import / Export
-- Template maps date/merchant/amount columns + date format + debit sign
-- `debitSign === "negative"` → multiply all amounts by `-1`
-- Sets `source` field to template name on each transaction
-- Supported date formats: MM/DD/YYYY, DD/MM/YYYY, YYYY-MM-DD, M/D/YYYY
-- Import detects duplicates by `date|originalMerchant|amount` fingerprint; imports them but sets `possibleDuplicate: true` instead of skipping
-- Review page shows a "Possible Duplicate" warning banner on flagged transactions
-- Export: `GET /api/databases/:id/transactions/export` streams a CSV of reviewed transactions; optional `start`/`end` date params
+**Themes**: Four themes (Default, Vibrant, Pastel, Dark) stored in `localStorage` as `financeTracker:theme`. Applied via `data-theme` attribute on `<html>`. Picker lives in Settings.
 
-### Backup & Restore
-- `POST /api/databases/:id/backup` writes `~/.finance-tracker/backups/{name}-{timestamp}.json` containing all categories, transactions, templates, and settings
-- `POST /api/backups/:filename/restore` creates a new database (named `{original} (Restored)`), remapping category IDs in transactions
-- Filenames are sanitised; path traversal is rejected
-- UI lives in Settings page; lists all backups across all databases
+**Analytics (Chart.js CDN)**: Stats: Total/Monthly Spent + Avg/Day (2×2). Charts: Spending Over Time (grouped bar, last 12 months), By Category (stacked bar), By Source (stacked bar). Person filter applies to all charts. `Math.abs()` on all amounts. Chart instances in `chartInstances` map, destroyed before re-render. `disabledCategories`/`disabledSources` Sets track toggled-off labels.
 
-### Modal Component
-- Supports async submit handlers (`await`)
-- Returns `false` from handler to keep modal open (e.g., after category creation)
-- Updates content in place via `modal.updateContent()` (no stacking)
+**CSV import**: Template maps columns + date format + debit sign. Duplicates detected by `date|originalMerchant|amount` fingerprint — imported with `possibleDuplicate: true` (warning banner on Review page). Supported date formats: `MM/DD/YYYY`, `DD/MM/YYYY`, `YYYY-MM-DD`, `M/D/YYYY`.
 
-### Split Validation
-- Auto split always first; amount = transaction total minus sum of non-auto splits
-- Splits serialized as JSON string before sending to backend
-- Dollar ↔ percentage auto-conversion when switching type
+**Backup/Restore**: JSON snapshots at `~/.finance-tracker/backups/`. Restore creates a new DB (`{name} (Restored)`) remapping category IDs. Path traversal rejected. UI in Settings, lists all backups across all databases.
 
-## Running the Server
+**Modal component**: Async submit handlers; return `false` to keep open. `modal.updateContent()` replaces body HTML in place (no stacking). `modal.setSubmitText()` updates footer button.
+
+**Splits**: Auto split always first; amount = total − sum of non-auto splits. Dollar ↔ percentage conversion on type switch. Serialized as JSON string before sending to backend.
+
+## Running
 
 ```bash
-go run .              # development (http://localhost:8080)
+go run .                                          # dev (http://localhost:8080)
 go build -o finance-tracker && ./finance-tracker  # production binary
 ```
 
 ## Debugging
 
 ```bash
-# Check server
 curl http://localhost:8080/api/databases
-
-# SQLite inspection
-sqlite3 ~/.finance-tracker/data.db "SELECT * FROM databases;"
-sqlite3 ~/.finance-tracker/data.db "SELECT * FROM transactions WHERE database_id = 'some-uuid';"
-
-# Logs
+sqlite3 ~/.finance-tracker/data.db "SELECT * FROM transactions WHERE database_id = 'uuid';"
 tail -f ~/.finance-tracker/logs/server-$(date +%Y-%m-%d).log
+# Browser: localStorage.getItem('financeTracker:activeDb')
 ```
 
-```javascript
-// Browser console
-localStorage.getItem('financeTracker:activeDb')   // check session
-localStorage.removeItem('financeTracker:activeDb') // clear session
-```
-
-**Common issues**:
-- Port 8080 in use: `lsof -i :8080`
-- Dashboard redirects: server down or DB deleted
-- Review shows no transactions: ensure `reviewed` flag set; may need re-import
-- Async errors: all `AppState.setActiveDatabase()` / `getActiveDatabase()` calls need `await`
-- Analytics shows $0: removed `amount < 0` filter; uses `Math.abs()` now ✅
+**Common issues**: Port conflict → `lsof -i :8080`. Dashboard redirects → server down or DB deleted. Review empty → `reviewed` flag not set. Async errors → missing `await` on `AppState` calls.
 
 ## Known Limitations
 
-1. No authentication (localhost only)
-2. Analytics includes income in spending totals (uses `Math.abs`)
-
-## Next Steps
-
-- [ ] Authentication (JWT) for multi-user support
-- [ ] Budget tracking / month-over-month analytics
-- [ ] Recurring transaction templates
+- No authentication (localhost only)
+- Analytics includes income in totals (`Math.abs`)
 
 ## Code Style
 
-- ES6+: const/let, arrow functions, template literals
-- Static methods for utilities, instance methods for stateful components
-- Validate at function boundaries; comment complex logic only
-- Keep files under 500 lines; prefer composition over inheritance
+ES6+: const/let, arrow functions, template literals. Static methods for utilities, instance methods for stateful components. Validate at function boundaries. Files under 500 lines; composition over inheritance.
 
 ---
 **Last Updated**: 2026-03-09 | **Status**: ✅ Active development
