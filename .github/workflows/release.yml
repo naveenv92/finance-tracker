@@ -8,9 +8,12 @@ on:
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build-darwin-amd64:
-    runs-on: macos-13
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -21,6 +24,7 @@ jobs:
           GOOS: darwin
           GOARCH: amd64
           CGO_ENABLED: 1
+          CC: clang -arch x86_64
         run: go build -ldflags="-s -w" -o finance-tracker-darwin-amd64 .
       - uses: actions/upload-artifact@v4
         with:
