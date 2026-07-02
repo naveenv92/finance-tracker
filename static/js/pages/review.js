@@ -20,6 +20,7 @@ let unreviewedTransactions = [];
 let currentIndex = 0;
 let categories = [];
 let ownerName = '';
+let defaultSplitPerson = '';
 
 /**
  * Initialize page
@@ -45,6 +46,7 @@ async function loadSettings() {
   try {
     const settings = await SettingsAPI.get(dbId);
     ownerName = settings.ownerName || '';
+    defaultSplitPerson = settings.defaultSplitPerson || '';
   } catch (error) {
     console.error('Error loading settings:', error);
   }
@@ -331,11 +333,22 @@ function addSplit(transactionAmount) {
   const totalPeople = index + 1; // including the new split
   const defaultPct = (100 / totalPeople).toFixed(2);
 
+  // Redistribute the percentage evenly across existing percentage-type splits
+  // so they stay in sync with the new person being added
+  currentSplits.forEach(item => {
+    if (item.dataset.auto === 'true') return;
+    const typeSelect = item.querySelector('.split-type');
+    const percentageInput = item.querySelector('.split-percentage');
+    if (percentageInput && (!typeSelect || typeSelect.value === 'percentage')) {
+      percentageInput.value = defaultPct;
+    }
+  });
+
   const splitHTML = `
     <div class="split-item" data-index="${index}">
       <div class="form-group">
         <label class="form-label">Person Name</label>
-        <input type="text" class="split-name form-input" value="${index === 0 ? ownerName : ''}" placeholder="Name" required>
+        <input type="text" class="split-name form-input" value="${index === 0 ? ownerName : defaultSplitPerson}" placeholder="Name" required>
       </div>
       <div class="form-group">
         <label class="form-label">Amount Type</label>
@@ -417,6 +430,17 @@ function removeSplit(index, transactionAmount) {
     const remaining = document.querySelectorAll('.split-item');
     if (remaining.length === 0) {
       document.getElementById('splits-list').innerHTML = '<p class="text-muted" id="no-splits-msg">No splits added. The full amount goes to one person.</p>';
+    } else {
+      // Redistribute the percentage evenly across remaining percentage-type splits
+      const nonAuto = Array.from(remaining).filter(item => item.dataset.auto !== 'true');
+      const defaultPct = (100 / remaining.length).toFixed(2);
+      nonAuto.forEach(item => {
+        const typeSelect = item.querySelector('.split-type');
+        const percentageInput = item.querySelector('.split-percentage');
+        if (percentageInput && (!typeSelect || typeSelect.value === 'percentage')) {
+          percentageInput.value = defaultPct;
+        }
+      });
     }
 
     updateSplitTotal(transactionAmount);

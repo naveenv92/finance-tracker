@@ -66,6 +66,7 @@ async function loadSettings() {
   try {
     const settings = await SettingsAPI.get(dbId);
     document.getElementById('owner-name').value = settings.ownerName || '';
+    document.getElementById('default-split-person').value = settings.defaultSplitPerson || '';
   } catch (error) {
     console.error('Error loading settings:', error);
     Notification.error('Failed to load settings');
@@ -78,9 +79,10 @@ async function loadSettings() {
 async function saveSettings() {
   const dbId = AppState.getActiveDatabaseId();
   const ownerName = document.getElementById('owner-name').value.trim();
+  const defaultSplitPerson = document.getElementById('default-split-person').value.trim();
 
   try {
-    await SettingsAPI.update(dbId, { ownerName });
+    await SettingsAPI.update(dbId, { ownerName, defaultSplitPerson });
     Notification.success('Settings saved');
   } catch (error) {
     console.error('Error saving settings:', error);

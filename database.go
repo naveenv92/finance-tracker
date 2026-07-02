@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -144,6 +145,7 @@ func InitDB() error {
 	CREATE TABLE IF NOT EXISTS database_settings (
 		database_id TEXT PRIMARY KEY,
 		owner_name TEXT NOT NULL DEFAULT '',
+		default_split_person TEXT NOT NULL DEFAULT '',
 		FOREIGN KEY (database_id) REFERENCES databases(id) ON DELETE CASCADE
 	);
 
@@ -155,6 +157,14 @@ func InitDB() error {
 
 	if _, err = db.Exec(schema); err != nil {
 		return fmt.Errorf("failed to create schema: %w", err)
+	}
+
+	// Migrate existing installs: add columns introduced after their initial table creation.
+	// SQLite has no "ADD COLUMN IF NOT EXISTS", so ignore the "duplicate column" error.
+	if _, err = db.Exec(`ALTER TABLE database_settings ADD COLUMN default_split_person TEXT NOT NULL DEFAULT ''`); err != nil {
+		if !strings.Contains(err.Error(), "duplicate column name") {
+			return fmt.Errorf("failed to migrate database_settings: %w", err)
+		}
 	}
 
 	return nil
@@ -869,19 +879,20 @@ func UpdateTransaction(databaseID string, transaction *Transaction) (*Transactio
 
 // DatabaseSettings holds per-database user settings
 type DatabaseSettings struct {
-	DatabaseID string `json:"databaseId,omitempty"`
-	OwnerName  string `json:"ownerName"`
+	DatabaseID         string `json:"databaseId,omitempty"`
+	OwnerName          string `json:"ownerName"`
+	DefaultSplitPerson string `json:"defaultSplitPerson"`
 }
 
 // GetSettings retrieves settings for a database, returning defaults if none exist
 func GetSettings(databaseID string) (*DatabaseSettings, error) {
-	query := `SELECT database_id, owner_name FROM database_settings WHERE database_id = ?`
+	query := `SELECT database_id, owner_name, default_split_person FROM database_settings WHERE database_id = ?`
 
 	var s DatabaseSettings
-	err := db.QueryRow(query, databaseID).Scan(&s.DatabaseID, &s.OwnerName)
+	err := db.QueryRow(query, databaseID).Scan(&s.DatabaseID, &s.OwnerName, &s.DefaultSplitPerson)
 	if err == sql.ErrNoRows {
 		// Return defaults if no settings row yet
-		return &DatabaseSettings{DatabaseID: databaseID, OwnerName: ""}, nil
+		return &DatabaseSettings{DatabaseID: databaseID, OwnerName: "", DefaultSplitPerson: ""}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get settings: %w", err)
@@ -892,11 +903,11 @@ func GetSettings(databaseID string) (*DatabaseSettings, error) {
 // UpsertSettings creates or updates settings for a database
 func UpsertSettings(databaseID string, settings *DatabaseSettings) (*DatabaseSettings, error) {
 	query := `
-		INSERT INTO database_settings (database_id, owner_name)
-		VALUES (?, ?)
-		ON CONFLICT(database_id) DO UPDATE SET owner_name = excluded.owner_name
+		INSERT INTO database_settings (database_id, owner_name, default_split_person)
+		VALUES (?, ?, ?)
+		ON CONFLICT(database_id) DO UPDATE SET owner_name = excluded.owner_name, default_split_person = excluded.default_split_person
 	`
-	_, err := db.Exec(query, databaseID, settings.OwnerName)
+	_, err := db.Exec(query, databaseID, settings.OwnerName, settings.DefaultSplitPerson)
 	if err != nil {
 		return nil, fmt.Errorf("failed to upsert settings: %w", err)
 	}
