@@ -24,6 +24,7 @@ let filteredTransactions = [];
 let currentPage = 1;
 let maxAmount = 0;
 let nameFilter = '';
+let signFilter = 'all'; // 'all' | 'positive' | 'negative'
 let ownerName = '';
 const rowsPerPage = 50;
 const selectedIds = new Set();
@@ -141,7 +142,14 @@ async function renderFilters() {
     </div>
     <div class="table-filters-row">
       <div class="table-filter amount-filter">
-        <label class="form-label">Amount: <span id="amount-range-label">${formatCurrency(0)} – ${formatCurrency(maxAmount)}</span></label>
+        <div class="amount-filter-header">
+          <label class="form-label">Amount: <span id="amount-range-label">${formatCurrency(0)} – ${formatCurrency(maxAmount)}</span></label>
+          <div class="sign-toggle" id="sign-toggle" role="group" aria-label="Filter by amount sign">
+            <button type="button" class="sign-toggle-btn${signFilter === 'all' ? ' active' : ''}" data-sign="all">All</button>
+            <button type="button" class="sign-toggle-btn${signFilter === 'positive' ? ' active' : ''}" data-sign="positive">Positive</button>
+            <button type="button" class="sign-toggle-btn${signFilter === 'negative' ? ' active' : ''}" data-sign="negative">Negative</button>
+          </div>
+        </div>
         <div class="range-slider-wrapper">
           <div class="range-track">
             <div class="range-fill" id="range-fill"></div>
@@ -204,6 +212,15 @@ async function renderFilters() {
     updateRangeFill();
   });
 
+  // Amount sign toggle listener
+  document.getElementById('sign-toggle').addEventListener('click', (e) => {
+    const btn = e.target.closest('.sign-toggle-btn');
+    if (!btn) return;
+    signFilter = btn.dataset.sign;
+    document.querySelectorAll('.sign-toggle-btn').forEach(b => b.classList.toggle('active', b === btn));
+    filterTransactions();
+  });
+
   updateRangeFill();
 }
 
@@ -249,7 +266,12 @@ function filterTransactions() {
     const absAmount = Math.abs(displayAmount);
     const matchesAmount = absAmount >= minAmt && absAmount <= maxAmt;
 
-    if (!matchesSearch || !matchesCategory || !matchesAmount || !matchesDate) return [];
+    // Sign filter — isolate positive (e.g. income/refunds) or negative (e.g. expenses) amounts
+    const matchesSign = signFilter === 'all' ||
+      (signFilter === 'positive' && displayAmount >= 0) ||
+      (signFilter === 'negative' && displayAmount < 0);
+
+    if (!matchesSearch || !matchesCategory || !matchesAmount || !matchesDate || !matchesSign) return [];
 
     return [{ ...t, _displayAmount: displayAmount }];
   });
