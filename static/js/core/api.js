@@ -113,7 +113,8 @@ export const TransactionAPI = {
  */
 export const CategoryAPI = {
   async getAll(databaseId) {
-    return fetchAPI(`/databases/${databaseId}/categories`);
+    const categories = await fetchAPI(`/databases/${databaseId}/categories`);
+    return categories.sort((a, b) => a.name.localeCompare(b.name));
   },
 
   async create(databaseId, category) {

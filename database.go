@@ -138,6 +138,7 @@ func InitDB() error {
 		amount_column TEXT NOT NULL,
 		date_format TEXT NOT NULL,
 		debit_sign TEXT NOT NULL DEFAULT 'positive',
+		owner_name TEXT NOT NULL DEFAULT '',
 		created_at DATETIME NOT NULL,
 		FOREIGN KEY (database_id) REFERENCES databases(id) ON DELETE CASCADE
 	);
@@ -164,6 +165,12 @@ func InitDB() error {
 	if _, err = db.Exec(`ALTER TABLE database_settings ADD COLUMN default_split_person TEXT NOT NULL DEFAULT ''`); err != nil {
 		if !strings.Contains(err.Error(), "duplicate column name") {
 			return fmt.Errorf("failed to migrate database_settings: %w", err)
+		}
+	}
+
+	if _, err = db.Exec(`ALTER TABLE templates ADD COLUMN owner_name TEXT NOT NULL DEFAULT ''`); err != nil {
+		if !strings.Contains(err.Error(), "duplicate column name") {
+			return fmt.Errorf("failed to migrate templates: %w", err)
 		}
 	}
 
@@ -421,15 +428,16 @@ func GetCategoryUsageCount(databaseID, categoryID string) (int, error) {
 
 // Template represents a CSV import template
 type Template struct {
-	ID             string    `json:"id"`
-	DatabaseID     string    `json:"databaseId,omitempty"`
-	Name           string    `json:"name"`
-	DateColumn     string    `json:"dateColumn"`
-	MerchantColumn string    `json:"merchantColumn"`
-	AmountColumn   string    `json:"amountColumn"`
-	DateFormat     string    `json:"dateFormat"`
-	DebitSign      string    `json:"debitSign"` // "negative" or "positive"
-	CreatedAt      time.Time `json:"createdAt"`
+	ID                 string    `json:"id"`
+	DatabaseID         string    `json:"databaseId,omitempty"`
+	Name               string    `json:"name"`
+	DateColumn         string    `json:"dateColumn"`
+	MerchantColumn     string    `json:"merchantColumn"`
+	AmountColumn       string    `json:"amountColumn"`
+	DateFormat         string    `json:"dateFormat"`
+	DebitSign          string    `json:"debitSign"` // "negative" or "positive"
+	OwnerName          string    `json:"ownerName"` // overrides the database's owner name (the 100% auto split) for transactions imported with this template
+	CreatedAt          time.Time `json:"createdAt"`
 }
 
 // CreateTemplate creates a new CSV import template
@@ -443,8 +451,8 @@ func CreateTemplate(databaseID string, template *Template) (*Template, error) {
 	}
 
 	query := `
-		INSERT INTO templates (id, database_id, name, date_column, merchant_column, amount_column, date_format, debit_sign, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO templates (id, database_id, name, date_column, merchant_column, amount_column, date_format, debit_sign, owner_name, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	_, err := db.Exec(query,
@@ -456,6 +464,7 @@ func CreateTemplate(databaseID string, template *Template) (*Template, error) {
 		template.AmountColumn,
 		template.DateFormat,
 		template.DebitSign,
+		template.OwnerName,
 		template.CreatedAt,
 	)
 	if err != nil {
@@ -469,7 +478,7 @@ func CreateTemplate(databaseID string, template *Template) (*Template, error) {
 // GetTemplates retrieves all templates for a database
 func GetTemplates(databaseID string) ([]*Template, error) {
 	query := `
-		SELECT id, database_id, name, date_column, merchant_column, amount_column, date_format, debit_sign, created_at
+		SELECT id, database_id, name, date_column, merchant_column, amount_column, date_format, debit_sign, owner_name, created_at
 		FROM templates
 		WHERE database_id = ?
 		ORDER BY created_at ASC
@@ -484,7 +493,7 @@ func GetTemplates(databaseID string) ([]*Template, error) {
 	templates := make([]*Template, 0)
 	for rows.Next() {
 		var t Template
-		if err := rows.Scan(&t.ID, &t.DatabaseID, &t.Name, &t.DateColumn, &t.MerchantColumn, &t.AmountColumn, &t.DateFormat, &t.DebitSign, &t.CreatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.DatabaseID, &t.Name, &t.DateColumn, &t.MerchantColumn, &t.AmountColumn, &t.DateFormat, &t.DebitSign, &t.OwnerName, &t.CreatedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan template: %w", err)
 		}
 		templates = append(templates, &t)
@@ -500,14 +509,14 @@ func GetTemplates(databaseID string) ([]*Template, error) {
 // GetTemplate retrieves a template by ID
 func GetTemplate(databaseID, templateID string) (*Template, error) {
 	query := `
-		SELECT id, database_id, name, date_column, merchant_column, amount_column, date_format, debit_sign, created_at
+		SELECT id, database_id, name, date_column, merchant_column, amount_column, date_format, debit_sign, owner_name, created_at
 		FROM templates
 		WHERE id = ? AND database_id = ?
 	`
 
 	var t Template
 	err := db.QueryRow(query, templateID, databaseID).Scan(
-		&t.ID, &t.DatabaseID, &t.Name, &t.DateColumn, &t.MerchantColumn, &t.AmountColumn, &t.DateFormat, &t.DebitSign, &t.CreatedAt,
+		&t.ID, &t.DatabaseID, &t.Name, &t.DateColumn, &t.MerchantColumn, &t.AmountColumn, &t.DateFormat, &t.DebitSign, &t.OwnerName, &t.CreatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("template not found")
@@ -529,7 +538,7 @@ func UpdateTemplate(databaseID string, template *Template) error {
 
 	result, err := db.Exec(`
 		UPDATE templates
-		SET name = ?, date_column = ?, merchant_column = ?, amount_column = ?, date_format = ?, debit_sign = ?
+		SET name = ?, date_column = ?, merchant_column = ?, amount_column = ?, date_format = ?, debit_sign = ?, owner_name = ?
 		WHERE id = ? AND database_id = ?
 	`,
 		template.Name,
@@ -538,6 +547,7 @@ func UpdateTemplate(databaseID string, template *Template) error {
 		template.AmountColumn,
 		template.DateFormat,
 		template.DebitSign,
+		template.OwnerName,
 		template.ID,
 		databaseID,
 	)

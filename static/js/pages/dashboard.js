@@ -386,11 +386,13 @@ function generateTemplatesModalContent(templates, editingTemplate) {
                  data-merchant-column="${tmpl.merchantColumn.replace(/"/g, '&quot;')}"
                  data-amount-column="${tmpl.amountColumn.replace(/"/g, '&quot;')}"
                  data-date-format="${tmpl.dateFormat}"
-                 data-debit-sign="${tmpl.debitSign || 'positive'}">
+                 data-debit-sign="${tmpl.debitSign || 'positive'}"
+                 data-owner-name="${(tmpl.ownerName || '').replace(/"/g, '&quot;')}">
               <div>
                 <div style="font-weight: var(--font-weight-medium);">${tmpl.name}</div>
                 <div style="font-size: var(--font-size-xs); color: var(--gray-500);">
                   Date: ${tmpl.dateColumn}, Merchant: ${tmpl.merchantColumn}, Amount: ${tmpl.amountColumn} (debits are ${tmpl.debitSign || 'positive'})
+                  ${tmpl.ownerName ? `<br>Owner: ${tmpl.ownerName}` : ''}
                 </div>
               </div>
             </div>
@@ -444,6 +446,11 @@ function generateTemplatesModalContent(templates, editingTemplate) {
             </label>
           </div>
         </div>
+        <div class="form-group">
+          <label for="template-owner-name" class="form-label">Owner Name</label>
+          <input type="text" id="template-owner-name" name="ownerName" class="form-input" placeholder="e.g., Alex" value="${t ? t.ownerName || '' : ''}">
+          <span class="form-help">The person auto-assigned 100% when reviewing transactions imported with this template. Leave blank to use the Owner Name from Settings.</span>
+        </div>
       </form>
     </div>
   `;
@@ -481,6 +488,7 @@ function setupTemplateItemListeners(dbId, modal, getEditingTemplate, setEditingT
         amountColumn: el.dataset.amountColumn,
         dateFormat: el.dataset.dateFormat,
         debitSign: el.dataset.debitSign,
+        ownerName: el.dataset.ownerName,
       };
 
       const menu = document.createElement('div');

@@ -3,7 +3,7 @@
  */
 
 import { AppState } from '../core/state.js';
-import { TransactionAPI, CategoryAPI, SettingsAPI } from '../core/api.js';
+import { TransactionAPI, CategoryAPI, SettingsAPI, TemplateAPI } from '../core/api.js';
 import { Notification } from '../components/notification.js';
 import { DateFormatter } from '../utils/date-formatter.js';
 import { formatCurrency } from '../utils/helpers.js';
@@ -19,6 +19,7 @@ if (!AppState.requireActiveDatabase()) {
 let unreviewedTransactions = [];
 let currentIndex = 0;
 let categories = [];
+let templates = [];
 let ownerName = '';
 let defaultSplitPerson = '';
 
@@ -26,7 +27,7 @@ let defaultSplitPerson = '';
  * Initialize page
  */
 async function init() {
-  await Promise.all([loadCategories(), loadSettings()]);
+  await Promise.all([loadCategories(), loadSettings(), loadTemplates()]);
 
   if (!ownerName) {
     Notification.error('Please set your name in Database Settings before reviewing transactions.');
@@ -64,6 +65,29 @@ async function loadCategories() {
     Notification.error('Failed to load categories');
     categories = [];
   }
+}
+
+/**
+ * Load CSV templates from backend, used to resolve each transaction's owner name
+ */
+async function loadTemplates() {
+  const dbId = AppState.getActiveDatabaseId();
+  try {
+    templates = await TemplateAPI.getAll(dbId);
+  } catch (error) {
+    console.error('Error loading templates:', error);
+    templates = [];
+  }
+}
+
+/**
+ * Determine the owner (100% auto split) for a transaction: the template it
+ * was imported with (matched by source name) if it set an owner name,
+ * otherwise the database-wide owner name.
+ */
+function getOwnerNameFor(transaction) {
+  const template = templates.find(t => t.name === transaction.source);
+  return (template && template.ownerName) || ownerName;
 }
 
 /**
@@ -117,11 +141,12 @@ function renderCompleteMessage() {
  */
 function renderReviewForm() {
   const transaction = unreviewedTransactions[currentIndex];
+  const transactionOwnerName = getOwnerNameFor(transaction);
   // Parse splits if stored as JSON string; default to owner's 100% split for new transactions
   const saved = parseSplits(transaction.splits);
-  const isDefaultOwnerSplit = saved.length === 0 && !!ownerName;
+  const isDefaultOwnerSplit = saved.length === 0 && !!transactionOwnerName;
   const splits = isDefaultOwnerSplit
-    ? [{ personName: ownerName, amount: transaction.amount }]
+    ? [{ personName: transactionOwnerName, amount: transaction.amount }]
     : saved;
 
   const amountClass = transaction.amount >= 0 ? 'positive' : 'negative';
@@ -292,7 +317,7 @@ function setupFormEventListeners() {
 
   // Add split
   document.getElementById('add-split-btn').addEventListener('click', () => {
-    addSplit(transaction.amount);
+    addSplit(transaction.amount, getOwnerNameFor(transaction));
   });
 
   // Remove split buttons
@@ -320,7 +345,7 @@ function setupFormEventListeners() {
 /**
  * Add a split
  */
-function addSplit(transactionAmount) {
+function addSplit(transactionAmount, transactionOwnerName) {
   const splitsList = document.getElementById('splits-list');
   const noSplitsMsg = document.getElementById('no-splits-msg');
 
@@ -348,7 +373,7 @@ function addSplit(transactionAmount) {
     <div class="split-item" data-index="${index}">
       <div class="form-group">
         <label class="form-label">Person Name</label>
-        <input type="text" class="split-name form-input" value="${index === 0 ? ownerName : defaultSplitPerson}" placeholder="Name" required>
+        <input type="text" class="split-name form-input" value="${index === 0 ? transactionOwnerName : defaultSplitPerson}" placeholder="Name" required>
       </div>
       <div class="form-group">
         <label class="form-label">Amount Type</label>

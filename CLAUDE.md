@@ -41,8 +41,8 @@ finance/
   notes, source, importedAt, possibleDuplicate }
 { id, name, color, emoji, createdAt }                         // Category (delete nulls categoryId on transactions)
 { id, name, dateColumn, merchantColumn, amountColumn,         // Template
-  dateFormat, debitSign, createdAt }  // debitSign: "positive"|"negative"
-{ databaseId, ownerName }                                     // DatabaseSettings
+  dateFormat, debitSign, ownerName, createdAt }  // debitSign: "positive"|"negative"; ownerName overrides DatabaseSettings' ownerName for transactions from this template
+{ databaseId, ownerName, defaultSplitPerson }                  // DatabaseSettings
 ```
 
 ## API Endpoints
@@ -81,7 +81,7 @@ AppState.requireActiveDatabase();          // sync guard, redirects to index.htm
 
 ## Key Implementation Notes
 
-**Review page**: Requires `ownerName` in settings (redirects if unset). First split is auto (owner, readonly, recalculates as remainder). New splits default to percentage, pre-filled with `100 / totalPeople`%. `getSplitsFromForm` reads auto split dollar amount directly.
+**Review page**: Requires `ownerName` in settings (redirects if unset). First split is auto (owner, readonly, recalculates as remainder) — its person name is the transaction's template `ownerName` (matched by `transaction.source` === template name) if the template set one, otherwise the database's `ownerName` setting. New splits (index > 0) default to percentage, pre-filled with `100 / totalPeople`% and the database's `defaultSplitPerson` setting for the name. `getSplitsFromForm` reads auto split dollar amount directly.
 
 **Transactions page**: Shows only `reviewed === true`. Filters: Category + Person / Date range / Amount slider. Person filter shows individual split amount with `(split)` label. "+" button adds manual transaction (`reviewed: true`, source defaults to "Manual"). Bulk editing via checkbox column → action bar for category/reviewed.
 
