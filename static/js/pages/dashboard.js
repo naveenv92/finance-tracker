@@ -178,7 +178,7 @@ window.showImportCSVModal = async function() {
           <div class="file-upload-text">Drop your CSV here or <span style="color:var(--color-primary);font-weight:var(--font-weight-medium)">browse</span></div>
           <div class="file-upload-hint" id="csv-file-hint">Accepts .csv files</div>
         </div>
-        <input type="file" id="csv-file" name="file" accept=".csv" required style="display:none">
+        <input type="file" id="csv-file" name="file" accept=".csv,text/csv,text/plain,application/vnd.ms-excel" required style="display:none">
       </div>
       <div class="form-group">
         <label for="template-select" class="form-label required">CSV Template</label>
