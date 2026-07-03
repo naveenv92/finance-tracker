@@ -16,15 +16,17 @@ export class DateFormatter {
     let formatPattern;
 
     // Create regex pattern based on format
+    // Month/day are matched as 1-2 digits since CSV exports often omit the
+    // leading zero (e.g. "3/15/2026") regardless of which format is selected.
     switch (format) {
       case 'MM/DD/YYYY':
-        formatPattern = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+        formatPattern = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
         break;
       case 'DD/MM/YYYY':
-        formatPattern = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+        formatPattern = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
         break;
       case 'YYYY-MM-DD':
-        formatPattern = /^(\d{4})-(\d{2})-(\d{2})$/;
+        formatPattern = /^(\d{4})-(\d{1,2})-(\d{1,2})$/;
         break;
       case 'M/D/YYYY':
         formatPattern = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
