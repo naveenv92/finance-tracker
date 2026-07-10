@@ -14,12 +14,24 @@ if (!AppState.requireActiveDatabase()) {
   document.addEventListener('DOMContentLoaded', init);
 }
 
-// Chart.js color palette
-const CHART_COLORS = [
-  '#4A90E2', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6',
-  '#EC4899', '#14B8A6', '#F97316', '#06B6D4', '#84CC16',
-  '#A855F7', '#6366F1', '#D97706', '#059669', '#DC2626'
+// Validated 8-hue categorical palette (fixed order — never cycled/regenerated)
+const CATEGORICAL_COLORS = [
+  '#2a78d6', // blue
+  '#1baf7a', // aqua
+  '#eda100', // yellow
+  '#008300', // green
+  '#4a3aa7', // violet
+  '#e34948', // red
+  '#e87ba4', // magenta
+  '#eb6834'  // orange
 ];
+const OTHER_COLOR = '#9CA3AF'; // fixed neutral gray — never a hue slot
+const ACCENT_COLOR = '#4A90E2'; // app primary, used for "selected" emphasis
+const DEEMPHASIS_COLOR = '#D1D5DB';
+const DEEMPHASIS_BORDER = '#9CA3AF';
+
+const CATEGORY_CAP = 5; // top N real slices; rest fold into "Other" (max 6 wedges total)
+const SOURCE_CAP = 5;
 
 // Module-level state
 let allTransactions = [];
@@ -28,6 +40,10 @@ let chartInstances = {};
 let currentDisplayTransactions = [];
 let disabledCategories = new Set();
 let disabledSources = new Set();
+let selectedMonth = currentMonthKey();
+let categoryColorMap = {};
+let sourceColorMap = {};
+let historicalMonths = [];
 
 async function init() {
   const dbId = AppState.getActiveDatabaseId();
@@ -44,6 +60,9 @@ async function init() {
     Notification.error('Failed to load analytics data');
     return;
   }
+
+  categoryColorMap = buildCategoryColorMap(allCategories, allTransactions);
+  sourceColorMap = buildSourceColorMap(allTransactions);
 
   renderFilters();
   applyFilters();
@@ -62,7 +81,95 @@ function parseSplits(splits) {
 }
 
 /**
- * Render the date and person filter bar
+ * Current calendar month as a YYYY-MM string
+ */
+function currentMonthKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/**
+ * Get display label for a transaction's category
+ */
+function getCategoryLabel(t, catMap) {
+  return t.categoryId && catMap[t.categoryId]
+    ? `${catMap[t.categoryId].emoji || ''} ${catMap[t.categoryId].name}`.trim()
+    : 'Uncategorized';
+}
+
+function buildCatMap(categories) {
+  const catMap = {};
+  for (const c of categories) catMap[c.id] = c;
+  return catMap;
+}
+
+/**
+ * Build a stable label -> color map from the FULL lifetime dataset, so a given
+ * category/source always renders in the same color regardless of which month
+ * or person filter is currently active (colors must follow the entity, not
+ * whatever happens to be in the current view).
+ */
+function buildCategoryColorMap(categories, transactions) {
+  const catMap = buildCatMap(categories);
+  const totals = {};
+  for (const t of transactions) {
+    const label = getCategoryLabel(t, catMap);
+    if (label === 'Uncategorized') continue;
+    totals[label] = (totals[label] || 0) + t.amount;
+  }
+  const ranked = Object.keys(totals).sort((a, b) => totals[b] - totals[a]);
+  const colorMap = {};
+  ranked.forEach((label, i) => {
+    colorMap[label] = i < CATEGORICAL_COLORS.length ? CATEGORICAL_COLORS[i] : OTHER_COLOR;
+  });
+  colorMap['Uncategorized'] = OTHER_COLOR;
+  colorMap['Other'] = OTHER_COLOR;
+  return colorMap;
+}
+
+function buildSourceColorMap(transactions) {
+  const totals = {};
+  for (const t of transactions) {
+    const label = t.source || 'Unknown';
+    totals[label] = (totals[label] || 0) + t.amount;
+  }
+  const ranked = Object.keys(totals).sort((a, b) => totals[b] - totals[a]);
+  const colorMap = {};
+  ranked.forEach((label, i) => {
+    colorMap[label] = i < CATEGORICAL_COLORS.length ? CATEGORICAL_COLORS[i] : OTHER_COLOR;
+  });
+  colorMap['Unknown'] = OTHER_COLOR;
+  colorMap['Other'] = OTHER_COLOR;
+  return colorMap;
+}
+
+/**
+ * Aggregate transactions by label, sort desc, and fold anything past `cap`
+ * real entries into a single "Other" bucket. Returns [{label, amount, color}].
+ */
+function capAndAggregate(transactions, labelFn, colorMap, cap) {
+  const totals = {};
+  for (const t of transactions) {
+    const label = labelFn(t);
+    totals[label] = (totals[label] || 0) + t.amount;
+  }
+  let entries = Object.entries(totals).map(([label, amount]) => ({
+    label,
+    amount: parseFloat(amount.toFixed(2))
+  }));
+  entries.sort((a, b) => b.amount - a.amount);
+
+  if (entries.length > cap + 1) {
+    const top = entries.slice(0, cap);
+    const restSum = entries.slice(cap).reduce((sum, e) => sum + e.amount, 0);
+    entries = [...top, { label: 'Other', amount: parseFloat(restSum.toFixed(2)) }];
+  }
+
+  return entries.map(e => ({ ...e, color: colorMap[e.label] || OTHER_COLOR }));
+}
+
+/**
+ * Render the person filter bar
  */
 function renderFilters() {
   const personNames = [...new Set(
@@ -110,10 +217,23 @@ function applyFilters() {
   disabledSources = new Set();
 
   destroyCharts();
-  renderStats(currentDisplayTransactions);
+  renderLifetimeStats(currentDisplayTransactions);
   renderSpendingOverTime(currentDisplayTransactions);
-  renderByCategory(currentDisplayTransactions, allCategories);
-  renderBySource(currentDisplayTransactions);
+  renderMonthScoped(currentDisplayTransactions);
+}
+
+/**
+ * Change the selected month (called from the historical chart's click handler)
+ * and re-render only the month-scoped views, plus the historical chart's
+ * bar emphasis (lightweight update, no destroy/recreate).
+ */
+function selectMonth(month) {
+  if (month === selectedMonth) return;
+  selectedMonth = month;
+  disabledCategories = new Set();
+  disabledSources = new Set();
+  updateHistoricalChartEmphasis();
+  renderMonthScoped(currentDisplayTransactions);
 }
 
 /**
@@ -124,25 +244,19 @@ function destroyCharts() {
   chartInstances = {};
 }
 
+function monthTransactions(transactions) {
+  return transactions.filter(t => t.date.slice(0, 7) === selectedMonth);
+}
+
 /**
- * Render the four stat numbers: lifetime and this-month totals + avg/day
+ * Lifetime-only stats (unaffected by the selected month)
  */
-function renderStats(transactions) {
-  const now = new Date();
-  const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-
-  const monthTxns = transactions.filter(t => t.date.slice(0, 7) === thisMonth);
-
+function renderLifetimeStats(transactions) {
   const totalLifetime = transactions.reduce((sum, t) => sum + t.amount, 0);
-  const totalMonth    = monthTxns.reduce((sum, t) => sum + t.amount, 0);
-
   document.getElementById('stat-total-lifetime').textContent = formatCurrency(totalLifetime);
-  document.getElementById('stat-total-month').textContent    = formatCurrency(totalMonth);
 
-  // Lifetime avg/day: days between min and max transaction date
   if (transactions.length === 0) {
     document.getElementById('stat-avg-day-lifetime').textContent = formatCurrency(0);
-    document.getElementById('stat-avg-day-month').textContent    = formatCurrency(0);
     return;
   }
 
@@ -151,8 +265,21 @@ function renderStats(transactions) {
     (new Date(allDates[allDates.length - 1]) - new Date(allDates[0])) / (1000 * 60 * 60 * 24)
   ) + 1);
   document.getElementById('stat-avg-day-lifetime').textContent = formatCurrency(totalLifetime / lifetimeDays);
+}
 
-  // This-month avg/day: days between min and max transaction date within the month
+/**
+ * Stats scoped to the selected month
+ */
+function renderMonthStats(transactions) {
+  const monthTxns = monthTransactions(transactions);
+  const monthLabel = formatMonthLabel(selectedMonth);
+
+  document.getElementById('stat-label-total-month').textContent = `Total Spent (${monthLabel})`;
+  document.getElementById('stat-label-avg-day-month').textContent = `Avg Spent / Day (${monthLabel})`;
+
+  const totalMonth = monthTxns.reduce((sum, t) => sum + t.amount, 0);
+  document.getElementById('stat-total-month').textContent = formatCurrency(totalMonth);
+
   if (monthTxns.length === 0) {
     document.getElementById('stat-avg-day-month').textContent = formatCurrency(0);
     return;
@@ -166,96 +293,22 @@ function renderStats(transactions) {
 }
 
 /**
+ * Everything scoped to the selected month: stat tiles, scope label, pie, sankey, source chart
+ */
+function renderMonthScoped(transactions) {
+  renderMonthStats(transactions);
+  document.getElementById('analytics-scope-label').textContent = `Showing: ${formatMonthLabel(selectedMonth)}`;
+  renderCategoryPie(transactions, allCategories);
+  renderSankey(transactions, allCategories);
+  renderBySource(transactions);
+}
+
+/**
  * Returns the number of days in a given YYYY-MM month string
  */
 function daysInMonth(monthStr) {
   const [year, month] = monthStr.split('-').map(Number);
   return new Date(year, month, 0).getDate();
-}
-
-/**
- * Grouped bar chart: last 12 months — total spending (left axis) + avg/day (right axis)
- */
-function renderSpendingOverTime(transactions) {
-  // Build the last 12 month keys in order
-  const now = new Date();
-  const months = [];
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-  }
-
-  // Aggregate totals per month
-  const byMonth = {};
-  for (const t of transactions) {
-    const m = t.date.slice(0, 7);
-    if (months.includes(m)) byMonth[m] = (byMonth[m] || 0) + t.amount;
-  }
-
-  const totals  = months.map(m => parseFloat((byMonth[m] || 0).toFixed(2)));
-  const avgDays = months.map((m, i) => parseFloat((totals[i] / daysInMonth(m)).toFixed(2)));
-
-  const formattedLabels = months.map(m => {
-    const [year, month] = m.split('-').map(Number);
-    return new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-  });
-
-  const ctx = document.getElementById('chart-spending-over-time').getContext('2d');
-  chartInstances['bar'] = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: formattedLabels,
-      datasets: [
-        {
-          label: 'Total Spent',
-          data: totals,
-          backgroundColor: '#4A90E2cc',
-          borderColor: '#4A90E2',
-          borderWidth: 1,
-          borderRadius: 4,
-          yAxisID: 'yLeft'
-        },
-        {
-          label: 'Avg / Day',
-          data: avgDays,
-          backgroundColor: '#10B981cc',
-          borderColor: '#10B981',
-          borderWidth: 1,
-          borderRadius: 4,
-          yAxisID: 'yRight'
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: true, position: 'top' },
-        tooltip: {
-          callbacks: {
-            label: ctx => `${ctx.dataset.label}: ${formatCurrency(ctx.parsed.y)}`
-          }
-        }
-      },
-      scales: {
-        yLeft: {
-          type: 'linear',
-          position: 'left',
-          beginAtZero: true,
-          ticks: { callback: v => formatCurrency(v) },
-          grid: { color: '#E5E7EB' }
-        },
-        yRight: {
-          type: 'linear',
-          position: 'right',
-          beginAtZero: true,
-          ticks: { callback: v => formatCurrency(v) },
-          grid: { drawOnChartArea: false }
-        },
-        x: { grid: { display: false } }
-      }
-    }
-  });
 }
 
 /**
@@ -280,102 +333,130 @@ function formatMonthLabel(m) {
 }
 
 /**
- * Get display label for a transaction's category
+ * Single-axis bar chart: last 12 months, Total Spent. Clicking a bar selects
+ * that month, which re-scopes the pie/sankey/source chart/month stats below.
+ * The selected month's bar is emphasized (accent color); all others are a
+ * de-emphasized gray — this avoids both a dual-axis chart and a recolored
+ * legend, keeping the "which month is selected" signal purely visual.
  */
-function getCategoryLabel(t, catMap) {
-  return t.categoryId && catMap[t.categoryId]
-    ? `${catMap[t.categoryId].emoji || ''} ${catMap[t.categoryId].name}`.trim()
-    : 'Uncategorized';
-}
+function renderSpendingOverTime(transactions) {
+  historicalMonths = getLast12Months();
 
-/**
- * Stacked bar chart: spending by category over last 12 months
- */
-function renderByCategory(transactions, categories) {
-  const months = getLast12Months();
-  const catMap = {};
-  for (const c of categories) catMap[c.id] = c;
+  const byMonth = {};
+  for (const t of transactions) {
+    const m = t.date.slice(0, 7);
+    if (historicalMonths.includes(m)) byMonth[m] = (byMonth[m] || 0) + t.amount;
+  }
 
-  const labelSet = new Set();
-  for (const t of transactions) labelSet.add(getCategoryLabel(t, catMap));
-  const allLabels = [...labelSet].sort();
+  const totals = historicalMonths.map(m => parseFloat((byMonth[m] || 0).toFixed(2)));
+  const formattedLabels = historicalMonths.map(formatMonthLabel);
+  const barColors = historicalMonths.map(m => m === selectedMonth ? ACCENT_COLOR + 'cc' : DEEMPHASIS_COLOR);
+  const borderColors = historicalMonths.map(m => m === selectedMonth ? ACCENT_COLOR : DEEMPHASIS_BORDER);
 
-  const colorMap = {};
-  allLabels.forEach((label, i) => { colorMap[label] = CHART_COLORS[i % CHART_COLORS.length]; });
-
-  const datasets = allLabels
-    .filter(label => !disabledCategories.has(label))
-    .map(label => ({
-      label,
-      data: months.map(m =>
-        parseFloat(transactions
-          .filter(t => t.date.slice(0, 7) === m && getCategoryLabel(t, catMap) === label)
-          .reduce((sum, t) => sum + t.amount, 0)
-          .toFixed(2))
-      ),
-      backgroundColor: colorMap[label] + 'cc',
-      borderColor: colorMap[label],
-      borderWidth: 1,
-      stack: 'stack0'
-    }));
-
-  if (chartInstances['category']) chartInstances['category'].destroy();
-  chartInstances['category'] = renderStackedBar('chart-by-category', months, datasets);
-
-  renderLegend('legend-by-category', allLabels, colorMap, disabledCategories, (label, disabled) => {
-    if (disabled) disabledCategories.add(label);
-    else disabledCategories.delete(label);
-    renderByCategory(currentDisplayTransactions, allCategories);
-  });
-}
-
-/**
- * Stacked bar chart: spending by source over last 12 months
- */
-function renderBySource(transactions) {
-  const months = getLast12Months();
-
-  const labelSet = new Set();
-  for (const t of transactions) labelSet.add(t.source || 'Unknown');
-  const allLabels = [...labelSet].sort();
-
-  const colorMap = {};
-  allLabels.forEach((label, i) => { colorMap[label] = CHART_COLORS[i % CHART_COLORS.length]; });
-
-  const datasets = allLabels
-    .filter(label => !disabledSources.has(label))
-    .map(label => ({
-      label,
-      data: months.map(m =>
-        parseFloat(transactions
-          .filter(t => t.date.slice(0, 7) === m && (t.source || 'Unknown') === label)
-          .reduce((sum, t) => sum + t.amount, 0)
-          .toFixed(2))
-      ),
-      backgroundColor: colorMap[label] + 'cc',
-      borderColor: colorMap[label],
-      borderWidth: 1,
-      stack: 'stack0'
-    }));
-
-  if (chartInstances['source']) chartInstances['source'].destroy();
-  chartInstances['source'] = renderStackedBar('chart-by-source', months, datasets);
-
-  renderLegend('legend-by-source', allLabels, colorMap, disabledSources, (label, disabled) => {
-    if (disabled) disabledSources.add(label);
-    else disabledSources.delete(label);
-    renderBySource(currentDisplayTransactions);
-  });
-}
-
-/**
- * Shared stacked bar chart renderer — returns the Chart instance
- */
-function renderStackedBar(canvasId, months, datasets) {
-  const ctx = document.getElementById(canvasId).getContext('2d');
-  return new Chart(ctx, {
+  const canvas = document.getElementById('chart-spending-over-time');
+  const ctx = canvas.getContext('2d');
+  chartInstances['bar'] = new Chart(ctx, {
     type: 'bar',
-    data: { labels: months.map(formatMonthLabel), datasets },
+    data: {
+      labels: formattedLabels,
+      datasets: [{
+        label: 'Total Spent',
+        data: totals,
+        backgroundColor: barColors,
+        borderColor: borderColors,
+        borderWidth: 1,
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      onClick: (evt, elements) => {
+        if (!elements.length) return;
+        selectMonth(historicalMonths[elements[0].index]);
+      },
+      onHover: (evt, elements) => {
+        canvas.style.cursor = elements.length ? 'pointer' : 'default';
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => `${formatCurrency(ctx.parsed.y)}`
+          }
+        }
+      },
+      scales: {
+        y: {
+          type: 'linear',
+          beginAtZero: true,
+          ticks: { callback: v => formatCurrency(v) },
+          grid: { color: '#E5E7EB' }
+        },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+/**
+ * Re-color the historical chart's bars to reflect the newly selected month,
+ * without destroying/recreating the chart (its underlying data is unchanged).
+ */
+function updateHistoricalChartEmphasis() {
+  const chart = chartInstances['bar'];
+  if (!chart) return;
+  chart.data.datasets[0].backgroundColor = historicalMonths.map(
+    m => m === selectedMonth ? ACCENT_COLOR + 'cc' : DEEMPHASIS_COLOR
+  );
+  chart.data.datasets[0].borderColor = historicalMonths.map(
+    m => m === selectedMonth ? ACCENT_COLOR : DEEMPHASIS_BORDER
+  );
+  chart.update();
+}
+
+function showEmptyState(canvasId, legendId, message) {
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (legendId) document.getElementById(legendId).innerHTML = '';
+  ctx.save();
+  ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillStyle = '#9CA3AF';
+  ctx.textAlign = 'center';
+  ctx.fillText(message, canvas.width / 2, canvas.height / 2);
+  ctx.restore();
+}
+
+/**
+ * Pie chart: spending by category for the selected month
+ */
+function renderCategoryPie(transactions, categories) {
+  const catMap = buildCatMap(categories);
+  const monthTx = monthTransactions(transactions);
+
+  if (chartInstances['pie']) { chartInstances['pie'].destroy(); delete chartInstances['pie']; }
+
+  if (monthTx.length === 0) {
+    showEmptyState('chart-category-pie', 'legend-category-pie', 'No transactions this month');
+    return;
+  }
+
+  const entries = capAndAggregate(monthTx, t => getCategoryLabel(t, catMap), categoryColorMap, CATEGORY_CAP);
+  const visible = entries.filter(e => !disabledCategories.has(e.label));
+
+  const ctx = document.getElementById('chart-category-pie').getContext('2d');
+  chartInstances['pie'] = new Chart(ctx, {
+    type: 'pie',
+    data: {
+      labels: visible.map(e => e.label),
+      datasets: [{
+        data: visible.map(e => e.amount),
+        backgroundColor: visible.map(e => e.color + 'cc'),
+        borderColor: '#fff',
+        borderWidth: 2
+      }]
+    },
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -383,20 +464,127 @@ function renderStackedBar(canvasId, months, datasets) {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            label: ctx => `${ctx.dataset.label}: ${formatCurrency(ctx.parsed.y)}`
+            label: ctx => `${ctx.label}: ${formatCurrency(ctx.parsed)}`
+          }
+        }
+      }
+    }
+  });
+
+  const colorMap = Object.fromEntries(entries.map(e => [e.label, e.color]));
+  renderLegend('legend-category-pie', entries.map(e => e.label), colorMap, disabledCategories, (label, disabled) => {
+    if (disabled) disabledCategories.add(label);
+    else disabledCategories.delete(label);
+    renderCategoryPie(currentDisplayTransactions, allCategories);
+  });
+}
+
+/**
+ * Sankey diagram: Total Spending -> Category, for the selected month.
+ * Uses the same capped category set + stable colors as the pie chart so the
+ * two visuals always agree.
+ */
+function renderSankey(transactions, categories) {
+  const catMap = buildCatMap(categories);
+  const monthTx = monthTransactions(transactions);
+
+  if (chartInstances['sankey']) { chartInstances['sankey'].destroy(); delete chartInstances['sankey']; }
+
+  if (monthTx.length === 0) {
+    showEmptyState('chart-sankey', null, 'No transactions this month');
+    return;
+  }
+
+  const entries = capAndAggregate(monthTx, t => getCategoryLabel(t, catMap), categoryColorMap, CATEGORY_CAP);
+  const visible = entries.filter(e => !disabledCategories.has(e.label));
+
+  const TOTAL_NODE = 'Total Spending';
+  const sankeyData = visible.map(e => ({ from: TOTAL_NODE, to: e.label, flow: e.amount }));
+  const colorByLabel = Object.fromEntries(visible.map(e => [e.label, e.color]));
+
+  const ctx = document.getElementById('chart-sankey').getContext('2d');
+  chartInstances['sankey'] = new Chart(ctx, {
+    type: 'sankey',
+    data: {
+      datasets: [{
+        label: 'Spending Flow',
+        data: sankeyData,
+        colorFrom: () => ACCENT_COLOR,
+        colorTo: (c) => colorByLabel[c.dataset.data[c.dataIndex].to] || OTHER_COLOR,
+        colorMode: 'gradient'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.raw.to}: ${formatCurrency(ctx.raw.flow)}`
+          }
+        }
+      }
+    }
+  });
+}
+
+/**
+ * Bar chart: spending by source for the selected month (one bar per source)
+ */
+function renderBySource(transactions) {
+  const monthTx = monthTransactions(transactions);
+
+  if (chartInstances['source']) { chartInstances['source'].destroy(); delete chartInstances['source']; }
+
+  if (monthTx.length === 0) {
+    showEmptyState('chart-by-source', 'legend-by-source', 'No transactions this month');
+    return;
+  }
+
+  const entries = capAndAggregate(monthTx, t => t.source || 'Unknown', sourceColorMap, SOURCE_CAP);
+  const visible = entries.filter(e => !disabledSources.has(e.label));
+
+  const ctx = document.getElementById('chart-by-source').getContext('2d');
+  chartInstances['source'] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: visible.map(e => e.label),
+      datasets: [{
+        label: 'Amount',
+        data: visible.map(e => e.amount),
+        backgroundColor: visible.map(e => e.color + 'cc'),
+        borderColor: visible.map(e => e.color),
+        borderWidth: 1,
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => `${formatCurrency(ctx.parsed.y)}`
           }
         }
       },
       scales: {
-        x: { stacked: true, grid: { display: false } },
+        x: { grid: { display: false } },
         y: {
-          stacked: true,
           beginAtZero: true,
           ticks: { callback: v => formatCurrency(v) },
           grid: { color: '#E5E7EB' }
         }
       }
     }
+  });
+
+  const colorMap = Object.fromEntries(entries.map(e => [e.label, e.color]));
+  renderLegend('legend-by-source', entries.map(e => e.label), colorMap, disabledSources, (label, disabled) => {
+    if (disabled) disabledSources.add(label);
+    else disabledSources.delete(label);
+    renderBySource(currentDisplayTransactions);
   });
 }
 

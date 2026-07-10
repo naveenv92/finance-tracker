@@ -70,12 +70,53 @@
   margin-bottom: var(--spacing-lg);
 }
 
+.analytics-card-hint {
+  font-size: var(--font-size-sm);
+  color: var(--gray-500);
+  margin-top: calc(-1 * var(--spacing-md));
+  margin-bottom: var(--spacing-lg);
+}
+
+.analytics-scope-label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--gray-600);
+  margin-bottom: var(--spacing-sm);
+}
+
+.analytics-drilldown-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-lg);
+  margin-bottom: var(--spacing-xl);
+}
+
+.analytics-drilldown-row .analytics-card {
+  margin-bottom: 0;
+}
+
+@media (max-width: 900px) {
+  .analytics-drilldown-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .chart-container--bar {
   height: 320px;
   position: relative;
 }
 
 .chart-container--stacked {
+  height: 360px;
+  position: relative;
+}
+
+.chart-container--pie {
+  height: 320px;
+  position: relative;
+}
+
+.chart-container--sankey {
   height: 360px;
   position: relative;
 }

@@ -17,6 +17,7 @@
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-sankey@0.14.4/dist/chartjs-chart-sankey.min.js"></script>
 </head>
 <body>
   <script src="js/core/icons.js"></script>
@@ -83,37 +84,48 @@
         </div>
         <div class="analytics-stats-row">
           <div class="stat-card">
-            <div class="stat-label">Total Spent This Month</div>
+            <div class="stat-label" id="stat-label-total-month">Total Spent This Month</div>
             <div class="stat-value" id="stat-total-month">—</div>
           </div>
           <div class="stat-card">
-            <div class="stat-label">Avg Spent / Day This Month</div>
+            <div class="stat-label" id="stat-label-avg-day-month">Avg Spent / Day This Month</div>
             <div class="stat-value" id="stat-avg-day-month">—</div>
           </div>
         </div>
       </div>
 
-      <!-- Bar Chart -->
+      <!-- Bar Chart: Spending Over Time (click a month to drill down) -->
       <div class="analytics-card">
         <h2 class="analytics-card-title">Spending Over Time</h2>
+        <p class="analytics-card-hint">Click a month to explore it below.</p>
         <div class="chart-container chart-container--bar">
           <canvas id="chart-spending-over-time"></canvas>
         </div>
       </div>
 
-      <!-- Stacked Bar: By Category -->
-      <div class="analytics-card">
-        <h2 class="analytics-card-title">Spending by Category</h2>
-        <div class="chart-container chart-container--stacked">
-          <canvas id="chart-by-category"></canvas>
+      <!-- Drill-down row: Pie + Sankey, both scoped to the selected month -->
+      <div class="analytics-scope-label" id="analytics-scope-label"></div>
+      <div class="analytics-drilldown-row">
+        <div class="analytics-card">
+          <h2 class="analytics-card-title">Spending by Category</h2>
+          <div class="chart-container chart-container--pie">
+            <canvas id="chart-category-pie"></canvas>
+          </div>
+          <div class="chart-legend" id="legend-category-pie"></div>
         </div>
-        <div class="chart-legend" id="legend-by-category"></div>
+
+        <div class="analytics-card">
+          <h2 class="analytics-card-title">Spending Flow</h2>
+          <div class="chart-container chart-container--sankey">
+            <canvas id="chart-sankey"></canvas>
+          </div>
+        </div>
       </div>
 
-      <!-- Stacked Bar: By Source -->
+      <!-- Bar: By Source (scoped to the selected month) -->
       <div class="analytics-card">
         <h2 class="analytics-card-title">Spending by Source</h2>
-        <div class="chart-container chart-container--stacked">
+        <div class="chart-container chart-container--bar">
           <canvas id="chart-by-source"></canvas>
         </div>
         <div class="chart-legend" id="legend-by-source"></div>
