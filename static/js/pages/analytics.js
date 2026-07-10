@@ -145,7 +145,9 @@ function buildSourceColorMap(transactions) {
 
 /**
  * Aggregate transactions by label, sort desc, and fold anything past `cap`
- * real entries into a single "Other" bucket. Returns [{label, amount, color}].
+ * real entries into a single "Other" bucket. The "Other" entry carries a
+ * `breakdown` array of the folded-in {label, amount} entries (still sorted
+ * desc) so tooltips can show what it's made of. Returns [{label, amount, color}].
  */
 function capAndAggregate(transactions, labelFn, colorMap, cap) {
   const totals = {};
@@ -161,11 +163,22 @@ function capAndAggregate(transactions, labelFn, colorMap, cap) {
 
   if (entries.length > cap + 1) {
     const top = entries.slice(0, cap);
-    const restSum = entries.slice(cap).reduce((sum, e) => sum + e.amount, 0);
-    entries = [...top, { label: 'Other', amount: parseFloat(restSum.toFixed(2)) }];
+    const rest = entries.slice(cap);
+    const restSum = rest.reduce((sum, e) => sum + e.amount, 0);
+    entries = [...top, { label: 'Other', amount: parseFloat(restSum.toFixed(2)), breakdown: rest }];
   }
 
   return entries.map(e => ({ ...e, color: colorMap[e.label] || OTHER_COLOR }));
+}
+
+/**
+ * Tooltip afterLabel callback: for the "Other" bucket, render its folded-in
+ * entries as extra tooltip lines. Returns [] for every other label.
+ */
+function otherBreakdownLines(entries, label) {
+  const entry = entries.find(e => e.label === label);
+  if (!entry || !entry.breakdown) return [];
+  return entry.breakdown.map(b => `${b.label}: ${formatCurrency(b.amount)}`);
 }
 
 /**
@@ -464,7 +477,8 @@ function renderCategoryPie(transactions, categories) {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            label: ctx => `${ctx.label}: ${formatCurrency(ctx.parsed)}`
+            label: ctx => `${ctx.label}: ${formatCurrency(ctx.parsed)}`,
+            afterLabel: ctx => otherBreakdownLines(visible, ctx.label)
           }
         }
       }
@@ -520,7 +534,8 @@ function renderSankey(transactions, categories) {
       plugins: {
         tooltip: {
           callbacks: {
-            label: ctx => `${ctx.raw.to}: ${formatCurrency(ctx.raw.flow)}`
+            label: ctx => `${ctx.raw.to}: ${formatCurrency(ctx.raw.flow)}`,
+            afterLabel: ctx => otherBreakdownLines(visible, ctx.raw.to)
           }
         }
       }
@@ -565,7 +580,8 @@ function renderBySource(transactions) {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            label: ctx => `${formatCurrency(ctx.parsed.y)}`
+            label: ctx => `${formatCurrency(ctx.parsed.y)}`,
+            afterLabel: ctx => otherBreakdownLines(visible, ctx.label)
           }
         }
       },
