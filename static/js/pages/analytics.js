@@ -262,11 +262,24 @@ function monthTransactions(transactions) {
 }
 
 /**
+ * Selected month's transactions, scoped to spending only (refunds/credits
+ * excluded — tracked separately via the Refunds/Credits stat) and with
+ * amount flipped to a positive magnitude for display/aggregation.
+ */
+function monthSpendTransactions(transactions) {
+  return monthTransactions(transactions)
+    .filter(t => t.amount < 0)
+    .map(t => ({ ...t, amount: -t.amount }));
+}
+
+/**
  * Lifetime-only stats (unaffected by the selected month)
  */
 function renderLifetimeStats(transactions) {
-  const totalLifetime = transactions.reduce((sum, t) => sum + t.amount, 0);
-  document.getElementById('stat-total-lifetime').textContent = formatCurrency(totalLifetime);
+  const totalSpentLifetime = -transactions.filter(t => t.amount < 0).reduce((sum, t) => sum + t.amount, 0);
+  const totalRefundsLifetime = transactions.filter(t => t.amount >= 0).reduce((sum, t) => sum + t.amount, 0);
+  document.getElementById('stat-total-lifetime').textContent = formatCurrency(totalSpentLifetime);
+  document.getElementById('stat-refunds-lifetime').textContent = formatCurrency(totalRefundsLifetime);
 
   if (transactions.length === 0) {
     document.getElementById('stat-avg-day-lifetime').textContent = formatCurrency(0);
@@ -277,7 +290,7 @@ function renderLifetimeStats(transactions) {
   const lifetimeDays = Math.max(1, Math.round(
     (new Date(allDates[allDates.length - 1]) - new Date(allDates[0])) / (1000 * 60 * 60 * 24)
   ) + 1);
-  document.getElementById('stat-avg-day-lifetime').textContent = formatCurrency(totalLifetime / lifetimeDays);
+  document.getElementById('stat-avg-day-lifetime').textContent = formatCurrency(totalSpentLifetime / lifetimeDays);
 }
 
 /**
@@ -289,9 +302,12 @@ function renderMonthStats(transactions) {
 
   document.getElementById('stat-label-total-month').textContent = `Total Spent (${monthLabel})`;
   document.getElementById('stat-label-avg-day-month').textContent = `Avg Spent / Day (${monthLabel})`;
+  document.getElementById('stat-label-refunds-month').textContent = `Refunds/Credits (${monthLabel})`;
 
-  const totalMonth = monthTxns.reduce((sum, t) => sum + t.amount, 0);
-  document.getElementById('stat-total-month').textContent = formatCurrency(totalMonth);
+  const totalSpentMonth = -monthTxns.filter(t => t.amount < 0).reduce((sum, t) => sum + t.amount, 0);
+  const totalRefundsMonth = monthTxns.filter(t => t.amount >= 0).reduce((sum, t) => sum + t.amount, 0);
+  document.getElementById('stat-total-month').textContent = formatCurrency(totalSpentMonth);
+  document.getElementById('stat-refunds-month').textContent = formatCurrency(totalRefundsMonth);
 
   if (monthTxns.length === 0) {
     document.getElementById('stat-avg-day-month').textContent = formatCurrency(0);
@@ -302,7 +318,7 @@ function renderMonthStats(transactions) {
   const monthDays = Math.max(1, Math.round(
     (new Date(monthDates[monthDates.length - 1]) - new Date(monthDates[0])) / (1000 * 60 * 60 * 24)
   ) + 1);
-  document.getElementById('stat-avg-day-month').textContent = formatCurrency(totalMonth / monthDays);
+  document.getElementById('stat-avg-day-month').textContent = formatCurrency(totalSpentMonth / monthDays);
 }
 
 /**
@@ -357,8 +373,9 @@ function renderSpendingOverTime(transactions) {
 
   const byMonth = {};
   for (const t of transactions) {
+    if (t.amount >= 0) continue; // spend only — refunds/credits are tracked separately
     const m = t.date.slice(0, 7);
-    if (historicalMonths.includes(m)) byMonth[m] = (byMonth[m] || 0) + t.amount;
+    if (historicalMonths.includes(m)) byMonth[m] = (byMonth[m] || 0) - t.amount;
   }
 
   const totals = historicalMonths.map(m => parseFloat((byMonth[m] || 0).toFixed(2)));
@@ -446,12 +463,12 @@ function showEmptyState(canvasId, legendId, message) {
  */
 function renderCategoryPie(transactions, categories) {
   const catMap = buildCatMap(categories);
-  const monthTx = monthTransactions(transactions);
+  const monthTx = monthSpendTransactions(transactions);
 
   if (chartInstances['pie']) { chartInstances['pie'].destroy(); delete chartInstances['pie']; }
 
   if (monthTx.length === 0) {
-    showEmptyState('chart-category-pie', 'legend-category-pie', 'No transactions this month');
+    showEmptyState('chart-category-pie', 'legend-category-pie', 'No spending this month');
     return;
   }
 
@@ -500,12 +517,12 @@ function renderCategoryPie(transactions, categories) {
  */
 function renderSankey(transactions, categories) {
   const catMap = buildCatMap(categories);
-  const monthTx = monthTransactions(transactions);
+  const monthTx = monthSpendTransactions(transactions);
 
   if (chartInstances['sankey']) { chartInstances['sankey'].destroy(); delete chartInstances['sankey']; }
 
   if (monthTx.length === 0) {
-    showEmptyState('chart-sankey', null, 'No transactions this month');
+    showEmptyState('chart-sankey', null, 'No spending this month');
     return;
   }
 
@@ -547,12 +564,12 @@ function renderSankey(transactions, categories) {
  * Bar chart: spending by source for the selected month (one bar per source)
  */
 function renderBySource(transactions) {
-  const monthTx = monthTransactions(transactions);
+  const monthTx = monthSpendTransactions(transactions);
 
   if (chartInstances['source']) { chartInstances['source'].destroy(); delete chartInstances['source']; }
 
   if (monthTx.length === 0) {
-    showEmptyState('chart-by-source', 'legend-by-source', 'No transactions this month');
+    showEmptyState('chart-by-source', 'legend-by-source', 'No spending this month');
     return;
   }
 
