@@ -234,7 +234,10 @@ window.showImportCSVModal = async function() {
         const debitSign = template.debitSign || 'positive';
         const transactions = rows.map(row => {
           const rawAmount = parseFloat(CSVParser.getValue(row, template.amountColumn).replace(/[,$]/g, ''));
-          const amount = debitSign === 'negative' ? rawAmount * -1 : rawAmount;
+          // App convention: expenses negative, income/refunds positive. If debits are
+          // recorded as positive in the CSV, negate so they land negative internally;
+          // if debits are already negative in the CSV, they already match and pass through.
+          const amount = debitSign === 'positive' ? rawAmount * -1 : rawAmount;
           return {
             date: DateFormatter.standardize(CSVParser.getValue(row, template.dateColumn), template.dateFormat),
             merchant: cleanMerchantName(CSVParser.getValue(row, template.merchantColumn)),
