@@ -134,6 +134,11 @@ function renderActions() {
       <div class="action-card-title">Analytics</div>
       <div class="action-card-description">View spending insights and charts</div>
     </div>
+    <div class="card action-card" onclick="window.location.href='settle.html'">
+      <div class="action-card-icon">🤝</div>
+      <div class="action-card-title">Settle Debts</div>
+      <div class="action-card-description">See who owes who and record settlements</div>
+    </div>
     <div class="card action-card" onclick="showCategoriesModal()">
       <div class="action-card-icon">🏷️</div>
       <div class="action-card-title">Manage Categories</div>
