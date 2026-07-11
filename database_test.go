@@ -59,12 +59,25 @@ func setupTestDB(t *testing.T) func() {
 		amount_column TEXT NOT NULL,
 		date_format TEXT NOT NULL,
 		debit_sign TEXT NOT NULL DEFAULT 'positive',
+		owner_name TEXT NOT NULL DEFAULT '',
 		created_at DATETIME NOT NULL,
 		FOREIGN KEY (database_id) REFERENCES databases(id) ON DELETE CASCADE
 	);
 	CREATE TABLE IF NOT EXISTS database_settings (
 		database_id TEXT PRIMARY KEY,
 		owner_name TEXT NOT NULL DEFAULT '',
+		default_split_person TEXT NOT NULL DEFAULT '',
+		FOREIGN KEY (database_id) REFERENCES databases(id) ON DELETE CASCADE
+	);
+	CREATE TABLE IF NOT EXISTS settlements (
+		id TEXT PRIMARY KEY,
+		database_id TEXT NOT NULL,
+		from_person TEXT NOT NULL,
+		to_person TEXT NOT NULL,
+		amount REAL NOT NULL,
+		date TEXT NOT NULL,
+		notes TEXT,
+		created_at DATETIME NOT NULL,
 		FOREIGN KEY (database_id) REFERENCES databases(id) ON DELETE CASCADE
 	);
 	PRAGMA foreign_keys = ON;
@@ -622,5 +635,85 @@ func TestUpsertSettings(t *testing.T) {
 	got, _ = GetSettings(dbRec.ID)
 	if got.OwnerName != "Bob" {
 		t.Errorf("expected 'Bob' after update, got %q", got.OwnerName)
+	}
+}
+
+// ==================== Settlements ====================
+
+func TestCreateAndGetSettlement(t *testing.T) {
+	defer setupTestDB(t)()
+
+	dbRec, _ := CreateDatabase("Settle DB")
+
+	created, err := CreateSettlement(dbRec.ID, &Settlement{
+		FromPerson: "Bob",
+		ToPerson:   "Alice",
+		Amount:     25.5,
+		Date:       "2026-07-01",
+		Notes:      "venmo",
+	})
+	if err != nil {
+		t.Fatalf("CreateSettlement: %v", err)
+	}
+	if created.ID == "" {
+		t.Error("expected non-empty settlement ID")
+	}
+
+	all, err := GetSettlements(dbRec.ID)
+	if err != nil {
+		t.Fatalf("GetSettlements: %v", err)
+	}
+	if len(all) != 1 {
+		t.Fatalf("expected 1 settlement, got %d", len(all))
+	}
+	got := all[0]
+	if got.FromPerson != "Bob" || got.ToPerson != "Alice" || got.Amount != 25.5 || got.Date != "2026-07-01" || got.Notes != "venmo" {
+		t.Errorf("GetSettlements mismatch: %+v", got)
+	}
+}
+
+func TestGetSettlements(t *testing.T) {
+	defer setupTestDB(t)()
+
+	dbRec, _ := CreateDatabase("Settle DB")
+
+	CreateSettlement(dbRec.ID, &Settlement{FromPerson: "Bob", ToPerson: "Alice", Amount: 10, Date: "2026-06-01"})
+	CreateSettlement(dbRec.ID, &Settlement{FromPerson: "Alice", ToPerson: "Carl", Amount: 20, Date: "2026-07-01"})
+
+	settlements, err := GetSettlements(dbRec.ID)
+	if err != nil {
+		t.Fatalf("GetSettlements: %v", err)
+	}
+	if len(settlements) != 2 {
+		t.Fatalf("expected 2 settlements, got %d", len(settlements))
+	}
+	if settlements[0].Date != "2026-07-01" {
+		t.Errorf("expected most recent settlement first, got date %q", settlements[0].Date)
+	}
+}
+
+func TestDeleteSettlement(t *testing.T) {
+	defer setupTestDB(t)()
+
+	dbRec, _ := CreateDatabase("Settle DB")
+	created, _ := CreateSettlement(dbRec.ID, &Settlement{FromPerson: "Bob", ToPerson: "Alice", Amount: 10, Date: "2026-06-01"})
+
+	if err := DeleteSettlement(dbRec.ID, created.ID); err != nil {
+		t.Fatalf("DeleteSettlement: %v", err)
+	}
+
+	all, _ := GetSettlements(dbRec.ID)
+	if len(all) != 0 {
+		t.Errorf("expected 0 settlements after deletion, got %d", len(all))
+	}
+}
+
+func TestDeleteSettlement_NotFound(t *testing.T) {
+	defer setupTestDB(t)()
+
+	dbRec, _ := CreateDatabase("Settle DB")
+	err := DeleteSettlement(dbRec.ID, "nonexistent")
+	if err == nil {
+		t.Error("expected error for missing settlement, got nil")
 	}
 }

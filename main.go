@@ -194,6 +194,12 @@ func handleDatabaseRoutes(w http.ResponseWriter, r *http.Request) {
 			} else {
 				handleTemplateByID(w, r, dbID, parts[2])
 			}
+		case "settlements":
+			if len(parts) == 2 {
+				handleSettlements(w, r, dbID)
+			} else {
+				handleSettlementByID(w, r, dbID, parts[2])
+			}
 		case "settings":
 			handleSettings(w, r, dbID)
 		case "backup":
@@ -755,6 +761,82 @@ func handleTemplateByID(w http.ResponseWriter, r *http.Request, dbID, templateID
 			return
 		}
 		debugf("deleted template id=%s db=%s", templateID, dbID)
+		w.WriteHeader(http.StatusNoContent)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// handleSettlements handles GET (list) and POST (create) for settlements
+func handleSettlements(w http.ResponseWriter, r *http.Request, dbID string) {
+	debugf("%s /api/databases/%s/settlements", r.Method, dbID)
+	switch r.Method {
+	case http.MethodGet:
+		settlements, err := GetSettlements(dbID)
+		if err != nil {
+			log.Printf("ERROR listing settlements db=%s: %v", dbID, err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		debugf("listed %d settlements db=%s", len(settlements), dbID)
+		json.NewEncoder(w).Encode(settlements)
+
+	case http.MethodPost:
+		var settlement Settlement
+		if err := json.NewDecoder(r.Body).Decode(&settlement); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		if strings.TrimSpace(settlement.FromPerson) == "" {
+			http.Error(w, "From person is required", http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(settlement.ToPerson) == "" {
+			http.Error(w, "To person is required", http.StatusBadRequest)
+			return
+		}
+		if settlement.FromPerson == settlement.ToPerson {
+			http.Error(w, "Cannot settle a debt with yourself", http.StatusBadRequest)
+			return
+		}
+		if settlement.Amount <= 0 {
+			http.Error(w, "Amount must be greater than zero", http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(settlement.Date) == "" {
+			http.Error(w, "Date is required", http.StatusBadRequest)
+			return
+		}
+
+		created, err := CreateSettlement(dbID, &settlement)
+		if err != nil {
+			log.Printf("ERROR creating settlement db=%s: %v", dbID, err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		debugf("created settlement id=%s db=%s", created.ID, dbID)
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(created)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// handleSettlementByID handles DELETE for a specific settlement
+func handleSettlementByID(w http.ResponseWriter, r *http.Request, dbID, settlementID string) {
+	debugf("%s /api/databases/%s/settlements/%s", r.Method, dbID, settlementID)
+	switch r.Method {
+	case http.MethodDelete:
+		if err := DeleteSettlement(dbID, settlementID); err != nil {
+			log.Printf("ERROR deleting settlement id=%s db=%s: %v", settlementID, dbID, err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		debugf("deleted settlement id=%s db=%s", settlementID, dbID)
 		w.WriteHeader(http.StatusNoContent)
 
 	default:

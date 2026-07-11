@@ -150,10 +150,23 @@ func InitDB() error {
 		FOREIGN KEY (database_id) REFERENCES databases(id) ON DELETE CASCADE
 	);
 
+	CREATE TABLE IF NOT EXISTS settlements (
+		id TEXT PRIMARY KEY,
+		database_id TEXT NOT NULL,
+		from_person TEXT NOT NULL,
+		to_person TEXT NOT NULL,
+		amount REAL NOT NULL,
+		date TEXT NOT NULL,
+		notes TEXT,
+		created_at DATETIME NOT NULL,
+		FOREIGN KEY (database_id) REFERENCES databases(id) ON DELETE CASCADE
+	);
+
 	CREATE INDEX IF NOT EXISTS idx_transactions_database_id ON transactions(database_id);
 	CREATE INDEX IF NOT EXISTS idx_transactions_reviewed ON transactions(reviewed);
 	CREATE INDEX IF NOT EXISTS idx_categories_database_id ON categories(database_id);
 	CREATE INDEX IF NOT EXISTS idx_templates_database_id ON templates(database_id);
+	CREATE INDEX IF NOT EXISTS idx_settlements_database_id ON settlements(database_id);
 	`
 
 	if _, err = db.Exec(schema); err != nil {
@@ -946,5 +959,103 @@ func DeleteTransaction(databaseID, transactionID string) error {
 	// Update database timestamp
 	UpdateDatabaseTimestamp(databaseID)
 
+	return nil
+}
+
+// ==================== Settlement Operations ====================
+
+// Settlement represents a record of one person paying another to settle a split-cost debt
+type Settlement struct {
+	ID         string    `json:"id"`
+	DatabaseID string    `json:"databaseId,omitempty"`
+	FromPerson string    `json:"fromPerson"`
+	ToPerson   string    `json:"toPerson"`
+	Amount     float64   `json:"amount"`
+	Date       string    `json:"date"` // YYYY-MM-DD format
+	Notes      string    `json:"notes,omitempty"`
+	CreatedAt  time.Time `json:"createdAt"`
+}
+
+// CreateSettlement creates a new settlement record
+func CreateSettlement(databaseID string, settlement *Settlement) (*Settlement, error) {
+	settlement.ID = uuid.New().String()
+	settlement.DatabaseID = databaseID
+	settlement.CreatedAt = time.Now()
+
+	query := `
+		INSERT INTO settlements (id, database_id, from_person, to_person, amount, date, notes, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`
+
+	_, err := db.Exec(query,
+		settlement.ID,
+		settlement.DatabaseID,
+		settlement.FromPerson,
+		settlement.ToPerson,
+		settlement.Amount,
+		settlement.Date,
+		settlement.Notes,
+		settlement.CreatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create settlement: %w", err)
+	}
+
+	UpdateDatabaseTimestamp(databaseID)
+	return settlement, nil
+}
+
+// GetSettlements retrieves all settlements for a database, most recent first
+func GetSettlements(databaseID string) ([]*Settlement, error) {
+	query := `
+		SELECT id, database_id, from_person, to_person, amount, date, notes, created_at
+		FROM settlements
+		WHERE database_id = ?
+		ORDER BY date DESC, created_at DESC
+	`
+
+	rows, err := db.Query(query, databaseID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query settlements: %w", err)
+	}
+	defer rows.Close()
+
+	settlements := make([]*Settlement, 0)
+	for rows.Next() {
+		var s Settlement
+		var notes sql.NullString
+		if err := rows.Scan(&s.ID, &s.DatabaseID, &s.FromPerson, &s.ToPerson, &s.Amount, &s.Date, &notes, &s.CreatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan settlement: %w", err)
+		}
+		s.Notes = notes.String
+		settlements = append(settlements, &s)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating settlements: %w", err)
+	}
+
+	return settlements, nil
+}
+
+// DeleteSettlement deletes a settlement
+func DeleteSettlement(databaseID, settlementID string) error {
+	query := `DELETE FROM settlements WHERE id = ? AND database_id = ?`
+
+	result, err := db.Exec(query, settlementID, databaseID)
+	if err != nil {
+		return fmt.Errorf("failed to delete settlement: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("settlement not found")
+	}
+
+	UpdateDatabaseTimestamp(databaseID)
 	return nil
 }

@@ -20,6 +20,7 @@ type BackupData struct {
 	Transactions []*Transaction    `json:"transactions"`
 	Templates    []*Template       `json:"templates"`
 	Settings     *DatabaseSettings `json:"settings"`
+	Settlements  []*Settlement     `json:"settlements"`
 }
 
 // BackupInfo represents metadata about a backup file
@@ -71,9 +72,14 @@ func CreateBackup(dbID string) (*BackupInfo, error) {
 		return nil, fmt.Errorf("failed to get settings: %w", err)
 	}
 
+	settlements, err := GetSettlements(dbID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get settlements: %w", err)
+	}
+
 	backedUpAt := time.Now()
 	data := &BackupData{
-		Version:      1,
+		Version:      2,
 		DatabaseID:   database.ID,
 		DatabaseName: database.Name,
 		BackedUpAt:   backedUpAt,
@@ -81,6 +87,7 @@ func CreateBackup(dbID string) (*BackupInfo, error) {
 		Transactions: transactions,
 		Templates:    templates,
 		Settings:     settings,
+		Settlements:  settlements,
 	}
 
 	safeName := sanitizeFilename(database.Name)
@@ -271,6 +278,14 @@ func RestoreBackup(filename string) (*Database, error) {
 	if data.Settings != nil {
 		if _, err := UpsertSettings(newDB.ID, data.Settings); err != nil {
 			return nil, fmt.Errorf("failed to restore settings: %w", err)
+		}
+	}
+
+	// Restore settlements
+	for _, s := range data.Settlements {
+		s.ID = ""
+		if _, err := CreateSettlement(newDB.ID, s); err != nil {
+			return nil, fmt.Errorf("failed to restore settlement: %w", err)
 		}
 	}
 

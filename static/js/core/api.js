@@ -203,3 +203,25 @@ export const TemplateAPI = {
     });
   },
 };
+
+/**
+ * Settlement API methods
+ */
+export const SettlementAPI = {
+  async getAll(databaseId) {
+    return fetchAPI(`/databases/${databaseId}/settlements`);
+  },
+
+  async create(databaseId, settlement) {
+    return fetchAPI(`/databases/${databaseId}/settlements`, {
+      method: 'POST',
+      body: JSON.stringify(settlement),
+    });
+  },
+
+  async delete(databaseId, settlementId) {
+    return fetchAPI(`/databases/${databaseId}/settlements/${settlementId}`, {
+      method: 'DELETE',
+    });
+  },
+};

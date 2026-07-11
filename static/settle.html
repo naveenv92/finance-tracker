@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Transactions - Finance Tracker</title>
+  <title>Settle Debts - Finance Tracker</title>
 
   <!-- Theme (must run before CSS to prevent flash) -->
   <script src="js/core/theme.js"></script>
@@ -13,9 +13,7 @@
   <link rel="stylesheet" href="css/variables.css">
   <link rel="stylesheet" href="css/global.css">
   <link rel="stylesheet" href="css/components.css">
-  <link rel="stylesheet" href="css/modals.css">
-  <link rel="stylesheet" href="css/table.css">
-  <link rel="stylesheet" href="css/pages/transactions.css">
+  <link rel="stylesheet" href="css/pages/settle.css">
 </head>
 <body>
   <script src="js/core/icons.js"></script>
@@ -34,13 +32,13 @@
           <a href="review.html" class="nav-icon-item" data-tooltip="Review Transactions">
             <svg width="20" height="20" aria-hidden="true"><use href="#icon-review"/></svg>
           </a>
-          <a href="transactions.html" class="nav-icon-item active" data-tooltip="View Transactions">
+          <a href="transactions.html" class="nav-icon-item" data-tooltip="View Transactions">
             <svg width="20" height="20" aria-hidden="true"><use href="#icon-transactions"/></svg>
           </a>
           <a href="analytics.html" class="nav-icon-item" data-tooltip="Analytics">
             <svg width="20" height="20" aria-hidden="true"><use href="#icon-analytics"/></svg>
           </a>
-          <a href="settle.html" class="nav-icon-item" data-tooltip="Settle Debts">
+          <a href="settle.html" class="nav-icon-item active" data-tooltip="Settle Debts">
             <svg width="20" height="20" aria-hidden="true"><use href="#icon-settle"/></svg>
           </a>
           <a href="dashboard.html?modal=categories" class="nav-icon-item" data-tooltip="Manage Categories">
@@ -64,52 +62,30 @@
     <!-- Main Content -->
     <main class="main-content">
       <div class="page-header">
-        <h1 class="page-title">Transactions</h1>
-        <p class="page-description">View and manage all your transactions. Only reviewed transactions are shown.</p>
+        <h1 class="page-title">Settle Debts</h1>
+        <p class="page-description">Who owes who, and record when debts are paid off.</p>
       </div>
 
-      <!-- Table Container -->
-      <div class="table-container">
-        <div class="table-header">
-          <h3 class="table-title">All Transactions</h3>
-          <div class="table-actions">
-            <div class="search-bar">
-              <span class="search-icon">🔍</span>
-              <input type="text" placeholder="Search by merchant..." id="search-input">
-            </div>
-            <button class="btn btn-secondary" id="export-csv-btn">Export CSV</button>
-            <button class="btn btn-primary" id="add-transaction-btn">+ Add Transaction</button>
+      <div class="settle-container">
+        <section class="settle-section">
+          <div class="settle-section-header">
+            <h2>Balances</h2>
+            <button class="btn btn-primary" id="record-settlement-btn">Record Settlement</button>
           </div>
-        </div>
+          <p class="text-muted" id="balances-empty" style="display:none;">Everyone's settled up.</p>
+          <div id="balances-container"></div>
+        </section>
 
-        <!-- Filters -->
-        <div class="table-filters" id="filters">
-          <!-- Filters will be inserted here -->
-        </div>
-
-        <!-- Table -->
-        <div id="transactions-table"></div>
-
-        <!-- Pagination -->
-        <div class="pagination" id="pagination">
-          <div class="pagination-info" id="pagination-info"></div>
-          <div class="pagination-controls" id="pagination-controls"></div>
-        </div>
+        <section class="settle-section">
+          <h2>Settlement History</h2>
+          <p class="text-muted" id="history-empty" style="display:none;">No settlements recorded yet.</p>
+          <div id="history-container"></div>
+        </section>
       </div>
     </main>
   </div>
 
-  <!-- Bulk action bar -->
-  <div class="bulk-action-bar" id="bulk-action-bar" hidden>
-    <span class="bulk-action-count" id="bulk-action-count"></span>
-    <div class="bulk-action-buttons">
-      <button class="btn btn-secondary" id="bulk-category-btn">Assign Category</button>
-      <button class="btn btn-danger" id="bulk-delete-btn">Delete</button>
-      <button class="btn btn-ghost" id="bulk-clear-btn">Clear</button>
-    </div>
-  </div>
-
   <!-- JavaScript -->
-  <script type="module" src="js/pages/transactions.js"></script>
+  <script type="module" src="js/pages/settle.js"></script>
 </body>
 </html>
