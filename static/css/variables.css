@@ -1,4 +1,9 @@
 :root {
+  /* Tells the browser to render native widgets (date picker icon, scrollbars, etc.)
+     with light chrome, regardless of the OS-level light/dark preference. Themes with
+     a dark surface override this to "dark" below so those icons stay visible. */
+  color-scheme: light;
+
   /* Surface (overridden per theme) */
   --white: #ffffff;
 
@@ -159,6 +164,8 @@
 
 /* ── Dark theme ────────────────────────────────────────────── */
 [data-theme="dark"] {
+  color-scheme: dark;
+
   --white: #1E293B;
 
   --color-primary: #60A5FA;
@@ -199,4 +206,145 @@
 
   --focus-ring-color: rgba(96, 165, 250, 0.25);
   --primary-bg-hover: rgba(96, 165, 250, 0.1);
+}
+
+/* ── Cyberpunk theme (High-Contrast Tech) ─────────────────────── */
+[data-theme="cyberpunk"] {
+  color-scheme: dark;
+
+  --white: #1F2937;
+
+  --color-primary: #06B6D4;
+  --color-primary-dark: #0891B2;
+  --color-primary-light: #67E8F9;
+
+  /* Secondary/highlight accent (electric violet); components fall back to primary if unset */
+  --color-secondary: #8B5CF6;
+
+  --color-success: #34D399;
+  --color-success-light: rgba(52, 211, 153, 0.15);
+
+  --color-error: #F43F5E;
+  --color-error-light: rgba(244, 63, 94, 0.15);
+
+  --color-warning: #FBBF24;
+  --color-warning-light: rgba(251, 191, 36, 0.15);
+
+  --color-danger: #F43F5E;
+  --color-income: #34D399;
+  --color-expense: #F43F5E;
+
+  /* Inverted slate scale anchored to Deep Midnight Blue / Crisp Off-White */
+  --gray-50:  #0B0F19;
+  --gray-100: #1F2937;
+  --gray-200: #2D3748;
+  --gray-300: #3F4B5E;
+  --gray-400: #64748B;
+  --gray-500: #94A3B8;
+  --gray-600: #C4CDD5;
+  --gray-700: #D8DEE4;
+  --gray-800: #ECEFF2;
+  --gray-900: #F9FAFB;
+
+  /* Neon-tinted shadows for a subtle glow on modals and hovered cards */
+  --shadow-sm:   0 1px 2px 0 rgba(0, 0, 0, 0.5);
+  --shadow-base: 0 1px 3px 0 rgba(0, 0, 0, 0.6), 0 1px 2px 0 rgba(0, 0, 0, 0.5);
+  --shadow-md:   0 4px 6px -1px rgba(0, 0, 0, 0.6), 0 2px 4px -1px rgba(0, 0, 0, 0.5);
+  --shadow-lg:   0 10px 15px -3px rgba(6, 182, 212, 0.15), 0 4px 6px -2px rgba(0, 0, 0, 0.5);
+  --shadow-2xl:  0 25px 50px -12px rgba(6, 182, 212, 0.25), 0 0 40px -5px rgba(139, 92, 246, 0.15);
+
+  --focus-ring-color: rgba(6, 182, 212, 0.35);
+  --primary-bg-hover: rgba(6, 182, 212, 0.1);
+}
+
+/* ── Neo-Brutalist theme (Playful & Confident) ────────────────── */
+[data-theme="brutalist"] {
+  --white: #FFFFFF;
+
+  --color-primary: #ADFF00;
+  --color-primary-dark: #8FD400;
+  --color-primary-light: #D4FF66;
+
+  /* Contrast accent (hot magenta); components fall back to primary if unset */
+  --color-secondary: #FF007A;
+
+  --color-success: #16A34A;
+  --color-success-light: #BBF7D0;
+
+  --color-error: #FF007A;
+  --color-error-light: #FFD6EA;
+
+  --color-warning: #FFDE4D;
+  --color-warning-light: #FFF6D1;
+
+  --color-danger: #FF007A;
+  --color-income: #16A34A;
+  --color-expense: #FF007A;
+
+  /* Warm ochre-to-black scale anchored to the Pale Ochre canvas and Ink Black text */
+  --gray-50:  #FDF8E2;
+  --gray-100: #F3EEDA;
+  --gray-200: #E8DFC0;
+  --gray-300: #D4C89A;
+  --gray-400: #A89B6E;
+  --gray-500: #6B6347;
+  --gray-600: #4A4430;
+  --gray-700: #2E2A1D;
+  --gray-800: #16140D;
+  --gray-900: #000000;
+
+  /* Hard-edged, no-blur offset shadows and square corners for the brutalist look */
+  --radius-sm: 0;
+  --radius-base: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+
+  --shadow-sm:   2px 2px 0 0 #000000;
+  --shadow-base: 3px 3px 0 0 #000000;
+  --shadow-md:   4px 4px 0 0 #000000;
+  --shadow-lg:   6px 6px 0 0 #000000;
+  --shadow-2xl:  8px 8px 0 0 #000000;
+
+  --focus-ring-color: rgba(0, 0, 0, 0.5);
+  --primary-bg-hover: rgba(173, 255, 0, 0.15);
+}
+
+/* ── Nordic Minimalist theme (Clean & Professional) ───────────── */
+[data-theme="nordic"] {
+  --white: #FFFFFF;
+
+  --color-primary: #4F46E5;
+  --color-primary-dark: #4338CA;
+  --color-primary-light: #818CF8;
+
+  /* Secondary brand nuance (deep forest green); components fall back to primary if unset */
+  --color-secondary: #14532D;
+
+  --color-success: #14532D;
+  --color-success-light: #DCFCE7;
+
+  --color-error: #DC2626;
+  --color-error-light: #FEE2E2;
+
+  --color-warning: #FB923C;
+  --color-warning-light: #FFEDD5;
+
+  --color-danger: #DC2626;
+  --color-income: #14532D;
+  --color-expense: #DC2626;
+
+  --gray-50:  #F8F9FA;
+  --gray-100: #F1F3F5;
+  --gray-200: #E9ECEF;
+  --gray-300: #DEE2E6;
+  --gray-400: #ADB5BD;
+  --gray-500: #868E96;
+  --gray-600: #495057;
+  --gray-700: #343A40;
+  --gray-800: #212529;
+  --gray-900: #1F2937;
+
+  --focus-ring-color: rgba(79, 70, 229, 0.2);
+  --primary-bg-hover: rgba(79, 70, 229, 0.05);
 }

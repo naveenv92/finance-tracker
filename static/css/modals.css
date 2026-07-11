@@ -135,3 +135,8 @@
     padding: 0;
   }
 }
+
+/* Neo-Brutalist: thick ink-black border around the modal */
+[data-theme="brutalist"] .modal {
+  border: 3px solid var(--gray-900);
+}

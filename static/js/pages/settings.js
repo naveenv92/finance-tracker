@@ -28,6 +28,21 @@ const THEMES = [
     name: 'Dark',
     swatch: 'linear-gradient(135deg, #1E293B 50%, #0F172A 50%)',
   },
+  {
+    id: 'cyberpunk',
+    name: 'Cyberpunk',
+    swatch: 'linear-gradient(135deg, #06B6D4 50%, #0B0F19 50%)',
+  },
+  {
+    id: 'brutalist',
+    name: 'Neo-Brutalist',
+    swatch: 'linear-gradient(135deg, #ADFF00 50%, #FDF8E2 50%)',
+  },
+  {
+    id: 'nordic',
+    name: 'Nordic',
+    swatch: 'linear-gradient(135deg, #4F46E5 50%, #F8F9FA 50%)',
+  },
 ];
 
 // Check for active database

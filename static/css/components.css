@@ -473,3 +473,42 @@
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px var(--focus-ring-color);
 }
+
+/* Neo-Brutalist: thick ink-black borders + hard offset shadows, black text on bright fills */
+[data-theme="brutalist"] .card,
+[data-theme="brutalist"] .action-card {
+  border: 3px solid var(--gray-900);
+}
+
+[data-theme="brutalist"] .btn {
+  border: 2px solid var(--gray-900);
+  box-shadow: var(--shadow-base);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), background-color var(--transition-fast);
+}
+
+[data-theme="brutalist"] .btn:hover:not(:disabled) {
+  transform: translate(-2px, -2px);
+  box-shadow: var(--shadow-md);
+}
+
+[data-theme="brutalist"] .btn-primary,
+[data-theme="brutalist"] .btn-secondary,
+[data-theme="brutalist"] .btn-danger {
+  color: var(--gray-900);
+}
+
+[data-theme="brutalist"] .btn-danger {
+  background-color: var(--color-danger);
+}
+
+[data-theme="brutalist"] .form-input,
+[data-theme="brutalist"] .form-select,
+[data-theme="brutalist"] .form-textarea {
+  border: 2px solid var(--gray-900);
+}
+
+[data-theme="brutalist"] .form-input:focus,
+[data-theme="brutalist"] .form-select:focus,
+[data-theme="brutalist"] .form-textarea:focus {
+  box-shadow: var(--shadow-base);
+}

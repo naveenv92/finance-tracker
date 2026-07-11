@@ -27,6 +27,8 @@
   outline: none;
   font-size: var(--font-size-sm);
   padding: 0;
+  background-color: transparent;
+  color: var(--gray-900);
 }
 
 .search-icon {
@@ -169,7 +171,9 @@
   align-items: center;
   gap: var(--spacing-md);
   padding: var(--spacing-sm) var(--spacing-lg);
-  background: var(--gray-900);
+  /* Fixed dark surface regardless of theme — --gray-900 inverts to near-white
+     in dark/cyberpunk, which would leave the white text unreadable */
+  background: rgba(17, 24, 39, 0.95);
   color: white;
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
@@ -184,7 +188,7 @@
 .bulk-action-count {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
-  color: var(--gray-300);
+  color: rgba(255, 255, 255, 0.65);
 }
 
 .bulk-action-buttons {
@@ -194,12 +198,12 @@
 
 .btn-ghost {
   background: transparent;
-  color: var(--gray-400);
-  border: 1px solid var(--gray-600);
+  color: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 .btn-ghost:hover {
-  background: var(--gray-800);
+  background: rgba(255, 255, 255, 0.15);
   color: white;
 }
 

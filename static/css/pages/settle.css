@@ -58,3 +58,8 @@
 .balance-amount {
   font-weight: var(--font-weight-semibold);
 }
+
+/* Neo-Brutalist: thick ink-black border around each section */
+[data-theme="brutalist"] .settle-section {
+  border: 3px solid var(--gray-900);
+}

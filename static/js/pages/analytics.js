@@ -26,9 +26,29 @@ const CATEGORICAL_COLORS = [
   '#eb6834'  // orange
 ];
 const OTHER_COLOR = '#9CA3AF'; // fixed neutral gray — never a hue slot
-const ACCENT_COLOR = '#4A90E2'; // app primary, used for "selected" emphasis
-const DEEMPHASIS_COLOR = '#D1D5DB';
-const DEEMPHASIS_BORDER = '#9CA3AF';
+
+// Chart chrome (grid lines, axis text, "selected month" emphasis, pie borders) follows
+// the active theme's CSS variables instead of being hardcoded for a light background.
+// Read once at load — theme.js sets data-theme before this module runs, and the theme
+// picker only lives on the Settings page, so it can't change without a full reload here.
+let ACCENT_COLOR = '#4A90E2';
+let DEEMPHASIS_COLOR = '#D1D5DB';
+let DEEMPHASIS_BORDER = '#9CA3AF';
+let CHART_GRID_COLOR = '#E5E7EB';
+let CHART_CARD_BG = '#ffffff';
+
+function applyChartTheme() {
+  const style = getComputedStyle(document.documentElement);
+  const read = (name, fallback) => style.getPropertyValue(name).trim() || fallback;
+
+  ACCENT_COLOR = read('--color-primary', ACCENT_COLOR);
+  DEEMPHASIS_COLOR = read('--gray-300', DEEMPHASIS_COLOR);
+  DEEMPHASIS_BORDER = read('--gray-400', DEEMPHASIS_BORDER);
+  CHART_GRID_COLOR = read('--gray-200', CHART_GRID_COLOR);
+  CHART_CARD_BG = read('--white', CHART_CARD_BG);
+
+  Chart.defaults.color = read('--gray-600', '#6B7280');
+}
 
 const CATEGORY_CAP = 5; // top N real slices; rest fold into "Other" (max 6 wedges total)
 const SOURCE_CAP = 5;
@@ -46,6 +66,8 @@ let sourceColorMap = {};
 let historicalMonths = [];
 
 async function init() {
+  applyChartTheme();
+
   const dbId = AppState.getActiveDatabaseId();
 
   try {
@@ -421,7 +443,7 @@ function renderSpendingOverTime(transactions) {
           type: 'linear',
           beginAtZero: true,
           ticks: { callback: v => formatCurrency(v) },
-          grid: { color: '#E5E7EB' }
+          grid: { color: CHART_GRID_COLOR }
         },
         x: { grid: { display: false } }
       }
@@ -483,7 +505,7 @@ function renderCategoryPie(transactions, categories) {
       datasets: [{
         data: visible.map(e => e.amount),
         backgroundColor: visible.map(e => e.color + 'cc'),
-        borderColor: '#fff',
+        borderColor: CHART_CARD_BG,
         borderWidth: 2
       }]
     },
@@ -607,7 +629,7 @@ function renderBySource(transactions) {
         y: {
           beginAtZero: true,
           ticks: { callback: v => formatCurrency(v) },
-          grid: { color: '#E5E7EB' }
+          grid: { color: CHART_GRID_COLOR }
         }
       }
     }

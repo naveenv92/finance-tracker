@@ -126,7 +126,7 @@ p {
 }
 
 .nav-icon-item.active {
-  background-color: var(--color-primary);
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary, var(--color-primary)));
   color: white;
 }
 
@@ -137,7 +137,9 @@ p {
   left: calc(100% + 10px);
   top: 50%;
   transform: translateY(-50%);
-  background-color: var(--gray-800);
+  /* Fixed dark bubble regardless of theme — --gray-800 inverts to near-white
+     in dark/cyberpunk, which would leave white text unreadable */
+  background-color: rgba(17, 24, 39, 0.92);
   color: white;
   padding: 5px 10px;
   border-radius: var(--radius-base);
@@ -251,3 +253,8 @@ p {
 .mb-md { margin-bottom: var(--spacing-md); }
 .mb-lg { margin-bottom: var(--spacing-lg); }
 .mb-xl { margin-bottom: var(--spacing-xl); }
+
+/* Neo-Brutalist: primary/secondary accents are bright, so use black text for contrast */
+[data-theme="brutalist"] .nav-icon-item.active {
+  color: var(--gray-900);
+}

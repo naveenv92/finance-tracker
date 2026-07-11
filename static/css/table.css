@@ -213,3 +213,8 @@
   font-size: var(--font-size-lg);
   color: var(--gray-500);
 }
+
+/* Neo-Brutalist: thick ink-black border around the table */
+[data-theme="brutalist"] .table-container {
+  border: 3px solid var(--gray-900);
+}
