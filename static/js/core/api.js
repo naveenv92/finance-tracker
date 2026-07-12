@@ -205,6 +205,41 @@ export const TemplateAPI = {
 };
 
 /**
+ * Merchant Mapping API methods
+ */
+export const MerchantMappingAPI = {
+  async getAll(databaseId) {
+    return fetchAPI(`/databases/${databaseId}/merchant-mappings`);
+  },
+
+  async create(databaseId, mapping) {
+    return fetchAPI(`/databases/${databaseId}/merchant-mappings`, {
+      method: 'POST',
+      body: JSON.stringify(mapping),
+    });
+  },
+
+  async update(databaseId, mapping) {
+    return fetchAPI(`/databases/${databaseId}/merchant-mappings/${mapping.id}`, {
+      method: 'PUT',
+      body: JSON.stringify(mapping),
+    });
+  },
+
+  async delete(databaseId, mappingId) {
+    return fetchAPI(`/databases/${databaseId}/merchant-mappings/${mappingId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async scan(databaseId) {
+    return fetchAPI(`/databases/${databaseId}/merchant-mappings/scan`, {
+      method: 'POST',
+    });
+  },
+};
+
+/**
  * Settlement API methods
  */
 export const SettlementAPI = {

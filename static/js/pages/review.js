@@ -3,7 +3,7 @@
  */
 
 import { AppState } from '../core/state.js';
-import { TransactionAPI, CategoryAPI, SettingsAPI, TemplateAPI } from '../core/api.js';
+import { TransactionAPI, CategoryAPI, SettingsAPI, TemplateAPI, MerchantMappingAPI } from '../core/api.js';
 import { Notification } from '../components/notification.js';
 import { DateFormatter } from '../utils/date-formatter.js';
 import { formatCurrency } from '../utils/helpers.js';
@@ -20,6 +20,7 @@ let unreviewedTransactions = [];
 let currentIndex = 0;
 let categories = [];
 let templates = [];
+let merchantMappings = [];
 let ownerName = '';
 let defaultSplitPerson = '';
 
@@ -27,7 +28,7 @@ let defaultSplitPerson = '';
  * Initialize page
  */
 async function init() {
-  await Promise.all([loadCategories(), loadSettings(), loadTemplates()]);
+  await Promise.all([loadCategories(), loadSettings(), loadTemplates(), loadMerchantMappings()]);
 
   if (!ownerName) {
     Notification.error('Please set your name in Database Settings before reviewing transactions.');
@@ -91,6 +92,27 @@ function getOwnerNameFor(transaction) {
 }
 
 /**
+ * Load saved merchant name mappings from backend
+ */
+async function loadMerchantMappings() {
+  const dbId = AppState.getActiveDatabaseId();
+  try {
+    merchantMappings = await MerchantMappingAPI.getAll(dbId);
+  } catch (error) {
+    console.error('Error loading merchant mappings:', error);
+    merchantMappings = [];
+  }
+}
+
+/**
+ * Look up a saved mapping for a merchant name (exact match), if any
+ */
+function findMappedMerchant(merchant) {
+  const mapping = merchantMappings.find(m => m.originalMerchant === merchant);
+  return mapping ? mapping.mappedMerchant : null;
+}
+
+/**
  * Load unreviewed transactions from backend
  */
 async function loadUnreviewedTransactions() {
@@ -150,6 +172,8 @@ function renderReviewForm() {
     : saved;
 
   const amountClass = transaction.amount >= 0 ? 'positive' : 'negative';
+  const mappedMerchant = findMappedMerchant(transaction.merchant);
+  const merchantValue = mappedMerchant || transaction.merchant;
 
   return `
     <div class="review-card">
@@ -175,13 +199,14 @@ function renderReviewForm() {
 
         <div class="form-group">
           <div class="original-merchant">Original: ${transaction.originalMerchant}</div>
+          ${mappedMerchant ? '<div class="mapping-hint">Auto-filled from a saved merchant mapping</div>' : ''}
           <label for="merchant" class="form-label required">Merchant Name</label>
           <input
             type="text"
             id="merchant"
             name="merchant"
             class="form-input"
-            value="${transaction.merchant}"
+            value="${merchantValue}"
             required
           >
         </div>
@@ -605,7 +630,12 @@ async function saveTransaction(andMoveNext) {
     await TransactionAPI.update(dbId, updated);
     // Update local copy so Previous navigation works correctly
     unreviewedTransactions[currentIndex] = { ...updated, splits };
-    Notification.success('Transaction saved');
+
+    let successMessage = 'Transaction saved';
+    if (merchant !== transaction.merchant) {
+      successMessage = await captureMerchantMapping(dbId, transaction.merchant, merchant);
+    }
+    Notification.success(successMessage);
 
     if (andMoveNext) {
       goToNext();
@@ -613,6 +643,29 @@ async function saveTransaction(andMoveNext) {
   } catch (error) {
     console.error('Error saving transaction:', error);
     Notification.error('Failed to save transaction');
+  }
+}
+
+/**
+ * Remember a merchant rename as a mapping so it auto-applies to future and
+ * existing transactions with the same original merchant. Never blocks the
+ * transaction save that already succeeded — failures are only logged.
+ */
+async function captureMerchantMapping(dbId, originalMerchant, mappedMerchant) {
+  try {
+    const result = await MerchantMappingAPI.create(dbId, { originalMerchant, mappedMerchant });
+    const existing = merchantMappings.find(m => m.originalMerchant === originalMerchant);
+    if (existing) {
+      existing.mappedMerchant = mappedMerchant;
+    } else {
+      merchantMappings.push({ originalMerchant, mappedMerchant });
+    }
+    return result.appliedCount > 0
+      ? `Transaction saved. Also updated ${result.appliedCount} other transaction${result.appliedCount !== 1 ? 's' : ''} with this merchant.`
+      : 'Transaction saved';
+  } catch (error) {
+    console.error('Error saving merchant mapping:', error);
+    return 'Transaction saved';
   }
 }
 

@@ -474,6 +474,13 @@
   box-shadow: 0 0 0 3px var(--focus-ring-color);
 }
 
+/* Merchant mapping conflict item (in Manage Merchant Mappings modal) */
+.mapping-conflict-item {
+  padding: var(--spacing-md);
+  border: 2px solid var(--color-warning);
+  border-radius: var(--radius-md);
+}
+
 /* Neo-Brutalist: thick ink-black borders + hard offset shadows, black text on bright fills */
 [data-theme="brutalist"] .card,
 [data-theme="brutalist"] .action-card {

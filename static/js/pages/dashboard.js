@@ -3,7 +3,7 @@
  */
 
 import { AppState } from '../core/state.js';
-import { TransactionAPI, CategoryAPI, TemplateAPI } from '../core/api.js';
+import { TransactionAPI, CategoryAPI, TemplateAPI, MerchantMappingAPI } from '../core/api.js';
 import { Modal } from '../components/modal.js';
 import { Notification } from '../components/notification.js';
 import { CSVParser } from '../utils/csv-parser.js';
@@ -148,6 +148,11 @@ function renderActions() {
       <div class="action-card-icon">📋</div>
       <div class="action-card-title">Manage Templates</div>
       <div class="action-card-description">Create and manage CSV import templates</div>
+    </div>
+    <div class="card action-card" onclick="showMerchantMappingsModal()">
+      <div class="action-card-icon">🏪</div>
+      <div class="action-card-title">Manage Merchant Mappings</div>
+      <div class="action-card-description">Auto-rename merchants and fix them everywhere</div>
     </div>
   `;
 
@@ -546,6 +551,285 @@ function setupTemplateItemListeners(dbId, modal, getEditingTemplate, setEditingT
 
   // Close menu when clicking outside
   document.addEventListener('click', closeTemplateMenu, { once: true, capture: true });
+}
+
+/**
+ * Show merchant mappings management modal
+ */
+window.showMerchantMappingsModal = async function() {
+  const dbId = AppState.getActiveDatabaseId();
+
+  let editingMapping = null;
+  const getEditingMapping = () => editingMapping;
+  const setEditingMapping = (m) => { editingMapping = m; };
+
+  let conflicts = [];
+  const getConflicts = () => conflicts;
+  const setConflicts = (c) => { conflicts = c; };
+
+  let mappings = [];
+  try {
+    mappings = await MerchantMappingAPI.getAll(dbId);
+  } catch (error) {
+    Notification.error('Failed to load merchant mappings');
+    return;
+  }
+
+  const contentHTML = generateMerchantMappingsModalContent(mappings, null, conflicts);
+  const modal = Modal.create('merchant-mappings-modal', 'Manage Merchant Mappings', contentHTML);
+  modal.setSubmitText('Create Mapping');
+
+  modal.setSubmitHandler(async () => {
+    const form = document.getElementById('merchant-mapping-form');
+    const formData = new FormData(form);
+    const data = Object.fromEntries(formData);
+
+    if (!data.originalMerchant?.trim() || !data.mappedMerchant?.trim()) {
+      Notification.error('Please fill in both fields');
+      return false;
+    }
+
+    try {
+      let result;
+      if (editingMapping) {
+        result = await MerchantMappingAPI.update(dbId, { id: editingMapping.id, ...data });
+        Notification.success(mappingSavedMessage('Mapping updated', result.appliedCount));
+        setEditingMapping(null);
+        modal.setSubmitText('Create Mapping');
+      } else {
+        result = await MerchantMappingAPI.create(dbId, data);
+        Notification.success(mappingSavedMessage('Mapping created', result.appliedCount));
+      }
+
+      const updatedMappings = await MerchantMappingAPI.getAll(dbId);
+      modal.updateContent(generateMerchantMappingsModalContent(updatedMappings, null, getConflicts()));
+      setupMerchantMappingItemListeners(dbId, modal, getEditingMapping, setEditingMapping, getConflicts, setConflicts);
+      return false; // Keep modal open
+    } catch (error) {
+      Notification.error('Failed to save mapping: ' + error.message);
+      return false;
+    }
+  });
+
+  modal.show();
+  setupMerchantMappingItemListeners(dbId, modal, getEditingMapping, setEditingMapping, getConflicts, setConflicts);
+};
+
+function mappingSavedMessage(prefix, appliedCount) {
+  return appliedCount > 0
+    ? `${prefix} — applied to ${appliedCount} transaction${appliedCount !== 1 ? 's' : ''}`
+    : prefix;
+}
+
+/**
+ * Generate merchant mappings modal content HTML
+ */
+function generateMerchantMappingsModalContent(mappings, editingMapping, conflicts) {
+  const formTitle = editingMapping ? 'Edit Mapping' : 'Create New Mapping';
+  const m = editingMapping;
+
+  return `
+    <div style="margin-bottom: var(--spacing-lg);">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--spacing-md);">
+        <h4 style="margin: 0;">Existing Mappings</h4>
+        <button type="button" class="btn btn-secondary btn-small" id="scan-mappings-btn">Scan Existing Transactions</button>
+      </div>
+      ${mappings.length === 0 ? '<p class="text-muted">No merchant mappings saved yet</p>' : `
+        <div style="display: flex; flex-direction: column; gap: var(--spacing-sm);">
+          ${mappings.map(mp => `
+            <div class="template-item-selectable${editingMapping && editingMapping.id === mp.id ? ' selected' : ''}"
+                 data-id="${mp.id}"
+                 data-original-merchant="${mp.originalMerchant.replace(/"/g, '&quot;')}"
+                 data-mapped-merchant="${mp.mappedMerchant.replace(/"/g, '&quot;')}">
+              <div style="font-weight: var(--font-weight-medium);">${mp.originalMerchant} &rarr; ${mp.mappedMerchant}</div>
+            </div>
+          `).join('')}
+        </div>
+        <p class="form-hint" style="margin-top: var(--spacing-sm);">Click a mapping to edit or delete it.</p>
+      `}
+    </div>
+    ${conflicts && conflicts.length > 0 ? `
+    <div class="divider"></div>
+    <div style="margin-bottom: var(--spacing-lg);">
+      <h4 style="margin-bottom: var(--spacing-sm);">Needs Review (${conflicts.length})</h4>
+      <p class="form-hint" style="margin-bottom: var(--spacing-md);">These merchants were renamed to more than one spelling in the past. Pick the correct one to apply everywhere.</p>
+      <div style="display: flex; flex-direction: column; gap: var(--spacing-md);">
+        ${conflicts.map((c, idx) => `
+          <div class="mapping-conflict-item" data-original-merchant="${c.originalMerchant.replace(/"/g, '&quot;')}" data-conflict-index="${idx}">
+            <div style="font-weight: var(--font-weight-medium); margin-bottom: var(--spacing-xs);">${c.originalMerchant}</div>
+            <div style="display: flex; flex-direction: column; gap: var(--spacing-xs);">
+              ${c.variants.map(v => `
+                <label style="display: flex; align-items: center; gap: var(--spacing-sm); cursor: pointer;">
+                  <input type="radio" name="conflict-${idx}" value="${v.merchant.replace(/"/g, '&quot;')}">
+                  ${v.merchant} <span class="text-muted">(${v.count})</span>
+                </label>
+              `).join('')}
+              <label style="display: flex; align-items: center; gap: var(--spacing-sm);">
+                <input type="radio" name="conflict-${idx}" value="__other__" class="conflict-other-radio">
+                <input type="text" class="form-input conflict-other-input" placeholder="Other spelling..." style="max-width: 200px;">
+              </label>
+            </div>
+            <button type="button" class="btn btn-secondary btn-small resolve-conflict-btn" data-conflict-index="${idx}" style="margin-top: var(--spacing-sm);">Resolve</button>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+    ` : ''}
+    <div class="divider"></div>
+    <div id="merchant-mapping-form-section">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--spacing-md);">
+        <h4>${formTitle}</h4>
+        ${editingMapping ? `<button type="button" class="btn btn-secondary btn-small" id="cancel-mapping-edit-btn">Cancel</button>` : ''}
+      </div>
+      <form id="merchant-mapping-form">
+        <div class="form-group">
+          <label for="mapping-original-merchant" class="form-label required">Original Merchant Name</label>
+          <input type="text" id="mapping-original-merchant" name="originalMerchant" class="form-input" placeholder="e.g., AMAZON MKTPLACE PMTS" value="${m ? m.originalMerchant : ''}" required>
+          <span class="form-help">The auto-cleaned name as it appears before editing (see "Original" on the Review page).</span>
+        </div>
+        <div class="form-group">
+          <label for="mapping-mapped-merchant" class="form-label required">Canonical Name</label>
+          <input type="text" id="mapping-mapped-merchant" name="mappedMerchant" class="form-input" placeholder="e.g., Amazon" value="${m ? m.mappedMerchant : ''}" required>
+        </div>
+      </form>
+    </div>
+  `;
+}
+
+let activeMappingMenu = null;
+
+function closeMappingMenu() {
+  if (activeMappingMenu) {
+    activeMappingMenu.remove();
+    activeMappingMenu = null;
+  }
+  document.querySelectorAll('.template-item-selectable.menu-open').forEach(el => el.classList.remove('menu-open'));
+}
+
+/**
+ * Attach listeners for the merchant mappings modal: item edit/delete popup
+ * menu, the scan button, and conflict-resolution rows.
+ */
+function setupMerchantMappingItemListeners(dbId, modal, getEditingMapping, setEditingMapping, getConflicts, setConflicts) {
+  document.querySelectorAll('.template-item-selectable').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+
+      const alreadyOpen = el.classList.contains('menu-open');
+      closeMappingMenu();
+      if (alreadyOpen) return;
+
+      el.classList.add('menu-open');
+
+      const mapping = {
+        id: el.dataset.id,
+        originalMerchant: el.dataset.originalMerchant,
+        mappedMerchant: el.dataset.mappedMerchant,
+      };
+
+      const menu = document.createElement('div');
+      menu.className = 'category-context-menu';
+      menu.innerHTML = `
+        <button class="category-menu-btn" data-action="edit">Edit</button>
+        <button class="category-menu-btn category-menu-btn--delete" data-action="delete">Delete</button>
+      `;
+      el.appendChild(menu);
+      activeMappingMenu = menu;
+
+      menu.querySelector('[data-action="edit"]').addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        closeMappingMenu();
+        setEditingMapping(mapping);
+        const mappings = await MerchantMappingAPI.getAll(dbId);
+        modal.updateContent(generateMerchantMappingsModalContent(mappings, mapping, getConflicts()));
+        modal.setSubmitText('Save Changes');
+        setupMerchantMappingItemListeners(dbId, modal, getEditingMapping, setEditingMapping, getConflicts, setConflicts);
+        document.getElementById('cancel-mapping-edit-btn')?.addEventListener('click', async () => {
+          setEditingMapping(null);
+          const refreshed = await MerchantMappingAPI.getAll(dbId);
+          modal.updateContent(generateMerchantMappingsModalContent(refreshed, null, getConflicts()));
+          modal.setSubmitText('Create Mapping');
+          setupMerchantMappingItemListeners(dbId, modal, getEditingMapping, setEditingMapping, getConflicts, setConflicts);
+        });
+      });
+
+      menu.querySelector('[data-action="delete"]').addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        closeMappingMenu();
+        if (!confirm('Delete this mapping? Existing transactions keep their current merchant name — this only stops future auto-apply.')) return;
+        try {
+          await MerchantMappingAPI.delete(dbId, mapping.id);
+          Notification.success('Mapping deleted');
+          if (getEditingMapping()?.id === mapping.id) setEditingMapping(null);
+          const mappings = await MerchantMappingAPI.getAll(dbId);
+          modal.updateContent(generateMerchantMappingsModalContent(mappings, getEditingMapping(), getConflicts()));
+          modal.setSubmitText(getEditingMapping() ? 'Save Changes' : 'Create Mapping');
+          setupMerchantMappingItemListeners(dbId, modal, getEditingMapping, setEditingMapping, getConflicts, setConflicts);
+        } catch (error) {
+          Notification.error('Failed to delete mapping: ' + error.message);
+        }
+      });
+    });
+  });
+
+  // Close menu when clicking outside
+  document.addEventListener('click', closeMappingMenu, { once: true, capture: true });
+
+  document.getElementById('scan-mappings-btn')?.addEventListener('click', async () => {
+    try {
+      const { migrated, conflicts } = await MerchantMappingAPI.scan(dbId);
+      setConflicts(conflicts || []);
+
+      const appliedTotal = (migrated || []).reduce((sum, m) => sum + m.appliedCount, 0);
+      if (migrated.length === 0 && conflicts.length === 0) {
+        Notification.success('No new historical renames found');
+      } else {
+        Notification.success(`Migrated ${migrated.length} merchant name${migrated.length !== 1 ? 's' : ''}, applied to ${appliedTotal} transaction${appliedTotal !== 1 ? 's' : ''}${conflicts.length > 0 ? ` — ${conflicts.length} need${conflicts.length === 1 ? 's' : ''} your review` : ''}`);
+      }
+
+      const mappings = await MerchantMappingAPI.getAll(dbId);
+      modal.updateContent(generateMerchantMappingsModalContent(mappings, getEditingMapping(), getConflicts()));
+      setupMerchantMappingItemListeners(dbId, modal, getEditingMapping, setEditingMapping, getConflicts, setConflicts);
+    } catch (error) {
+      Notification.error('Failed to scan transactions: ' + error.message);
+    }
+  });
+
+  document.querySelectorAll('.resolve-conflict-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const idx = Number(btn.dataset.conflictIndex);
+      const item = document.querySelector(`.mapping-conflict-item[data-conflict-index="${idx}"]`);
+      const selected = item.querySelector(`input[name="conflict-${idx}"]:checked`);
+      if (!selected) {
+        Notification.error('Please choose a spelling to resolve this conflict');
+        return;
+      }
+
+      const mappedMerchant = selected.value === '__other__'
+        ? item.querySelector('.conflict-other-input').value.trim()
+        : selected.value;
+
+      if (!mappedMerchant) {
+        Notification.error('Please enter a spelling to resolve this conflict');
+        return;
+      }
+
+      try {
+        const originalMerchant = item.dataset.originalMerchant;
+        const result = await MerchantMappingAPI.create(dbId, { originalMerchant, mappedMerchant });
+        Notification.success(mappingSavedMessage('Conflict resolved', result.appliedCount));
+
+        const remainingConflicts = getConflicts().filter((_, i) => i !== idx);
+        setConflicts(remainingConflicts);
+
+        const mappings = await MerchantMappingAPI.getAll(dbId);
+        modal.updateContent(generateMerchantMappingsModalContent(mappings, getEditingMapping(), getConflicts()));
+        setupMerchantMappingItemListeners(dbId, modal, getEditingMapping, setEditingMapping, getConflicts, setConflicts);
+      } catch (error) {
+        Notification.error('Failed to resolve conflict: ' + error.message);
+      }
+    });
+  });
 }
 
 const CATEGORY_COLORS = [

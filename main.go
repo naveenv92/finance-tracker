@@ -200,6 +200,14 @@ func handleDatabaseRoutes(w http.ResponseWriter, r *http.Request) {
 			} else {
 				handleSettlementByID(w, r, dbID, parts[2])
 			}
+		case "merchant-mappings":
+			if len(parts) == 2 {
+				handleMerchantMappings(w, r, dbID)
+			} else if parts[2] == "scan" {
+				handleMerchantMappingsScan(w, r, dbID)
+			} else {
+				handleMerchantMappingByID(w, r, dbID, parts[2])
+			}
 		case "settings":
 			handleSettings(w, r, dbID)
 		case "backup":
@@ -766,6 +774,118 @@ func handleTemplateByID(w http.ResponseWriter, r *http.Request, dbID, templateID
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// handleMerchantMappings handles GET (list) and POST (upsert) for merchant mappings
+func handleMerchantMappings(w http.ResponseWriter, r *http.Request, dbID string) {
+	debugf("%s /api/databases/%s/merchant-mappings", r.Method, dbID)
+	switch r.Method {
+	case http.MethodGet:
+		mappings, err := GetMerchantMappings(dbID)
+		if err != nil {
+			log.Printf("ERROR listing merchant mappings db=%s: %v", dbID, err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		debugf("listed %d merchant mappings db=%s", len(mappings), dbID)
+		json.NewEncoder(w).Encode(mappings)
+
+	case http.MethodPost:
+		var body struct {
+			OriginalMerchant string `json:"originalMerchant"`
+			MappedMerchant   string `json:"mappedMerchant"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(body.OriginalMerchant) == "" || strings.TrimSpace(body.MappedMerchant) == "" {
+			http.Error(w, "Both originalMerchant and mappedMerchant are required", http.StatusBadRequest)
+			return
+		}
+
+		mapping, applied, err := UpsertMerchantMapping(dbID, body.OriginalMerchant, body.MappedMerchant)
+		if err != nil {
+			log.Printf("ERROR upserting merchant mapping db=%s: %v", dbID, err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		debugf("upserted merchant mapping id=%s db=%s appliedCount=%d", mapping.ID, dbID, applied)
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(struct {
+			*MerchantMapping
+			AppliedCount int `json:"appliedCount"`
+		}{mapping, applied})
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// handleMerchantMappingByID handles PUT and DELETE for a specific merchant mapping
+func handleMerchantMappingByID(w http.ResponseWriter, r *http.Request, dbID, mappingID string) {
+	debugf("%s /api/databases/%s/merchant-mappings/%s", r.Method, dbID, mappingID)
+	switch r.Method {
+	case http.MethodPut:
+		var mapping MerchantMapping
+		if err := json.NewDecoder(r.Body).Decode(&mapping); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(mapping.OriginalMerchant) == "" || strings.TrimSpace(mapping.MappedMerchant) == "" {
+			http.Error(w, "Both originalMerchant and mappedMerchant are required", http.StatusBadRequest)
+			return
+		}
+
+		updated, applied, err := UpdateMerchantMapping(dbID, mappingID, &mapping)
+		if err != nil {
+			log.Printf("ERROR updating merchant mapping id=%s db=%s: %v", mappingID, dbID, err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		debugf("updated merchant mapping id=%s db=%s appliedCount=%d", mappingID, dbID, applied)
+		json.NewEncoder(w).Encode(struct {
+			*MerchantMapping
+			AppliedCount int `json:"appliedCount"`
+		}{updated, applied})
+
+	case http.MethodDelete:
+		if err := DeleteMerchantMapping(dbID, mappingID); err != nil {
+			log.Printf("ERROR deleting merchant mapping id=%s db=%s: %v", mappingID, dbID, err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		debugf("deleted merchant mapping id=%s db=%s", mappingID, dbID)
+		w.WriteHeader(http.StatusNoContent)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// handleMerchantMappingsScan handles POST /api/databases/:id/merchant-mappings/scan —
+// migrates unambiguous historical merchant renames and reports conflicts for manual resolution
+func handleMerchantMappingsScan(w http.ResponseWriter, r *http.Request, dbID string) {
+	debugf("%s /api/databases/%s/merchant-mappings/scan", r.Method, dbID)
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	migrated, conflicts, err := ScanMerchantMappingCandidates(dbID)
+	if err != nil {
+		log.Printf("ERROR scanning merchant mappings db=%s: %v", dbID, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	debugf("scanned merchant mappings db=%s migrated=%d conflicts=%d", dbID, len(migrated), len(conflicts))
+	json.NewEncoder(w).Encode(struct {
+		Migrated  []MigratedMapping `json:"migrated"`
+		Conflicts []MappingConflict `json:"conflicts"`
+	}{migrated, conflicts})
 }
 
 // handleSettlements handles GET (list) and POST (create) for settlements

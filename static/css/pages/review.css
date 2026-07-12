@@ -42,6 +42,12 @@
   margin-bottom: var(--spacing-xs);
 }
 
+.mapping-hint {
+  font-size: var(--font-size-sm);
+  color: var(--color-primary);
+  margin-bottom: var(--spacing-xs);
+}
+
 .splits-section {
   margin-top: var(--spacing-xl);
   padding-top: var(--spacing-xl);

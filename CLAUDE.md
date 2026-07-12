@@ -11,9 +11,10 @@
 
 ```
 finance/
-├── main.go       # HTTP server, routing, handlers
-├── database.go   # SQLite schema + CRUD
-├── backup.go     # Backup/restore logic
+├── main.go               # HTTP server, routing, handlers
+├── database.go           # SQLite schema + CRUD
+├── backup.go             # Backup/restore logic
+├── merchant_mapping.go   # Merchant name mapping CRUD + historical migration/scan
 └── static/       # Embedded frontend (embed.FS)
     ├── *.html    # index, dashboard, transactions, review, settings, analytics
     ├── css/      # reset, variables, global, components, modals, table, per-page
@@ -43,6 +44,7 @@ finance/
 { id, name, dateColumn, merchantColumn, amountColumn,         // Template
   dateFormat, debitSign, ownerName, createdAt }  // debitSign: "positive"|"negative"; ownerName overrides DatabaseSettings' ownerName for transactions from this template
 { databaseId, ownerName, defaultSplitPerson }                  // DatabaseSettings
+{ id, originalMerchant, mappedMerchant, createdAt, updatedAt } // MerchantMapping (unique per database on originalMerchant)
 ```
 
 ## API Endpoints
@@ -61,6 +63,10 @@ PUT/DELETE          /api/databases/:id/transactions/:transactionId
 
 GET/POST            /api/databases/:id/templates
 DELETE              /api/databases/:id/templates/:templateId
+
+GET/POST            /api/databases/:id/merchant-mappings         (POST upserts by originalMerchant)
+PUT/DELETE          /api/databases/:id/merchant-mappings/:mappingId
+POST                /api/databases/:id/merchant-mappings/scan     (migrates unambiguous historical renames, returns conflicts)
 
 GET/PUT             /api/databases/:id/settings
 POST                /api/databases/:id/backup
@@ -95,6 +101,8 @@ AppState.requireActiveDatabase();          // sync guard, redirects to index.htm
 
 **Backup/Restore**: JSON snapshots at `~/.finance-tracker/backups/`. Restore creates a new DB (`{name} (Restored)`) remapping category IDs. Path traversal rejected. UI in Settings, lists all backups across all databases.
 
+**Merchant Mappings**: Auto-cleaned merchant name (`transaction.merchant` before any user edit) → user's canonical name, per database, unique on `originalMerchant`. Captured automatically on Review-page save whenever the merchant field is changed (`review.js` `saveTransaction`/`captureMerchantMapping`) and pre-filled (with a hint) for not-yet-reviewed transactions whose merchant matches a saved mapping (`findMappedMerchant`). Every create/update — whether from Review auto-capture or the "Manage Merchant Mappings" dashboard modal — retroactively rewrites `merchant` on **every** transaction in the database (reviewed or not) whose `CleanMerchantName(original_merchant)` matches the key (`applyMerchantMapping` in `merchant_mapping.go`; `CleanMerchantName` is a Go port of `helpers.js`'s `cleanMerchantName` and must stay in sync with it). Deleting a mapping does not revert transactions. The "Scan Existing Transactions" action (`ScanMerchantMappingCandidates`) backfills mappings from history: transactions where `merchant` already differs from the recomputed clean key indicate a past rename — one distinct renamed spelling per key auto-migrates, 2+ distinct spellings (e.g. a typo) surface as a conflict in the modal for the user to resolve by picking/typing the canonical spelling, which then applies to every variant sharing that key.
+
 **Modal component**: Async submit handlers; return `false` to keep open. `modal.updateContent()` replaces body HTML in place (no stacking). `modal.setSubmitText()` updates footer button.
 
 **Splits**: Auto split always first; amount = total − sum of non-auto splits. Dollar ↔ percentage conversion on type switch. Serialized as JSON string before sending to backend.
@@ -127,4 +135,4 @@ tail -f ~/.finance-tracker/logs/server-$(date +%Y-%m-%d).log
 ES6+: const/let, arrow functions, template literals. Static methods for utilities, instance methods for stateful components. Validate at function boundaries. Files under 500 lines; composition over inheritance.
 
 ---
-**Last Updated**: 2026-03-09 | **Status**: ✅ Active development
+**Last Updated**: 2026-07-11 | **Status**: ✅ Active development

@@ -143,6 +143,17 @@ func InitDB() error {
 		FOREIGN KEY (database_id) REFERENCES databases(id) ON DELETE CASCADE
 	);
 
+	CREATE TABLE IF NOT EXISTS merchant_mappings (
+		id TEXT PRIMARY KEY,
+		database_id TEXT NOT NULL,
+		original_merchant TEXT NOT NULL,
+		mapped_merchant TEXT NOT NULL,
+		created_at DATETIME NOT NULL,
+		updated_at DATETIME NOT NULL,
+		UNIQUE(database_id, original_merchant),
+		FOREIGN KEY (database_id) REFERENCES databases(id) ON DELETE CASCADE
+	);
+
 	CREATE TABLE IF NOT EXISTS database_settings (
 		database_id TEXT PRIMARY KEY,
 		owner_name TEXT NOT NULL DEFAULT '',
@@ -167,6 +178,7 @@ func InitDB() error {
 	CREATE INDEX IF NOT EXISTS idx_categories_database_id ON categories(database_id);
 	CREATE INDEX IF NOT EXISTS idx_templates_database_id ON templates(database_id);
 	CREATE INDEX IF NOT EXISTS idx_settlements_database_id ON settlements(database_id);
+	CREATE INDEX IF NOT EXISTS idx_merchant_mappings_database_id ON merchant_mappings(database_id);
 	`
 
 	if _, err = db.Exec(schema); err != nil {
