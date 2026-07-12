@@ -6,7 +6,7 @@ import { AppState } from '../core/state.js';
 import { TransactionAPI, CategoryAPI, SettingsAPI, TemplateAPI, MerchantMappingAPI } from '../core/api.js';
 import { Notification } from '../components/notification.js';
 import { DateFormatter } from '../utils/date-formatter.js';
-import { formatCurrency } from '../utils/helpers.js';
+import { formatCurrency, resolveMerchantMapping } from '../utils/helpers.js';
 import { isValidMerchantName, isValidAmount, isValidPersonName } from '../utils/validators.js';
 
 // Check for active database
@@ -105,10 +105,10 @@ async function loadMerchantMappings() {
 }
 
 /**
- * Look up a saved mapping for a merchant name (exact match), if any
+ * Look up a saved mapping for a merchant name (exact or wildcard), if any
  */
 function findMappedMerchant(merchant) {
-  const mapping = merchantMappings.find(m => m.originalMerchant === merchant);
+  const mapping = resolveMerchantMapping(merchant, merchantMappings);
   return mapping ? mapping.mappedMerchant : null;
 }
 
@@ -654,11 +654,13 @@ async function saveTransaction(andMoveNext) {
 async function captureMerchantMapping(dbId, originalMerchant, mappedMerchant) {
   try {
     const result = await MerchantMappingAPI.create(dbId, { originalMerchant, mappedMerchant });
-    const existing = merchantMappings.find(m => m.originalMerchant === originalMerchant);
+    // Case-insensitive find, matching the backend's COLLATE NOCASE upsert lookup
+    const existing = merchantMappings.find(m => m.originalMerchant.toLowerCase() === originalMerchant.toLowerCase());
     if (existing) {
-      existing.mappedMerchant = mappedMerchant;
+      existing.originalMerchant = result.originalMerchant;
+      existing.mappedMerchant = result.mappedMerchant;
     } else {
-      merchantMappings.push({ originalMerchant, mappedMerchant });
+      merchantMappings.push({ originalMerchant: result.originalMerchant, mappedMerchant: result.mappedMerchant });
     }
     return result.appliedCount > 0
       ? `Transaction saved. Also updated ${result.appliedCount} other transaction${result.appliedCount !== 1 ? 's' : ''} with this merchant.`

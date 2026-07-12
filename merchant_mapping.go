@@ -63,18 +63,76 @@ func CleanMerchantName(merchant string) string {
 	return strings.TrimSpace(cleaned)
 }
 
+// mappingMatchesKey mirrors static/js/utils/helpers.js's mappingMatchesKey.
+// It must stay in sync with that implementation. A pattern ending in "*" is
+// a prefix match against cleanKey; otherwise it's an exact match. Both forms
+// compare case-insensitively, since the same vendor often appears with
+// different casing across different banks/statements.
+func mappingMatchesKey(pattern, cleanKey string) bool {
+	if strings.HasSuffix(pattern, "*") {
+		return strings.HasPrefix(strings.ToLower(cleanKey), strings.ToLower(strings.TrimSuffix(pattern, "*")))
+	}
+	return strings.EqualFold(pattern, cleanKey)
+}
+
+// resolveMerchantMapping mirrors static/js/utils/helpers.js's
+// resolveMerchantMapping. It must stay in sync with that implementation.
+// Exact matches always win over wildcard matches; among multiple matching
+// wildcards, the one with the longest literal prefix (most specific) wins.
+func resolveMerchantMapping(cleanKey string, mappings []*MerchantMapping) *MerchantMapping {
+	for _, m := range mappings {
+		if !strings.HasSuffix(m.OriginalMerchant, "*") && strings.EqualFold(m.OriginalMerchant, cleanKey) {
+			return m
+		}
+	}
+
+	var best *MerchantMapping
+	bestPrefixLen := -1
+	for _, m := range mappings {
+		if !strings.HasSuffix(m.OriginalMerchant, "*") {
+			continue
+		}
+		prefix := strings.TrimSuffix(m.OriginalMerchant, "*")
+		if mappingMatchesKey(m.OriginalMerchant, cleanKey) && len(prefix) > bestPrefixLen {
+			best = m
+			bestPrefixLen = len(prefix)
+		}
+	}
+	return best
+}
+
+// isValidMerchantMappingPattern enforces the trailing-wildcard-only syntax:
+// "*" may only appear as the final character, and the literal prefix before
+// it (or the whole pattern, if there's no "*") must be non-empty.
+func isValidMerchantMappingPattern(pattern string) bool {
+	if pattern == "" {
+		return false
+	}
+	if strings.Count(pattern, "*") > 1 {
+		return false
+	}
+	if idx := strings.Index(pattern, "*"); idx != -1 && idx != len(pattern)-1 {
+		return false
+	}
+	return strings.TrimSuffix(pattern, "*") != ""
+}
+
 // ==================== Merchant Mapping Operations ====================
 
 // UpsertMerchantMapping creates or updates the mapping for originalMerchant,
 // then applies it to every existing transaction whose merchant cleans to
 // that same key. Used by both the Review-page auto-capture and the manual
-// management screen, so any write here takes effect everywhere.
+// management screen, so any write here takes effect everywhere. Matching
+// against an existing mapping's original_merchant is case-insensitive
+// (COLLATE NOCASE) so re-capturing a differently-cased spelling of an
+// existing key updates that row instead of creating a duplicate; the
+// row's stored casing is refreshed to whatever was just submitted.
 func UpsertMerchantMapping(databaseID, originalMerchant, mappedMerchant string) (*MerchantMapping, int, error) {
 	now := time.Now()
 
 	result, err := db.Exec(
-		`UPDATE merchant_mappings SET mapped_merchant = ?, updated_at = ? WHERE database_id = ? AND original_merchant = ?`,
-		mappedMerchant, now, databaseID, originalMerchant,
+		`UPDATE merchant_mappings SET original_merchant = ?, mapped_merchant = ?, updated_at = ? WHERE database_id = ? AND original_merchant = ? COLLATE NOCASE`,
+		originalMerchant, mappedMerchant, now, databaseID, originalMerchant,
 	)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to update merchant mapping: %w", err)
@@ -105,7 +163,7 @@ func UpsertMerchantMapping(databaseID, originalMerchant, mappedMerchant string) 
 		}
 	} else {
 		err := db.QueryRow(
-			`SELECT id, created_at FROM merchant_mappings WHERE database_id = ? AND original_merchant = ?`,
+			`SELECT id, created_at FROM merchant_mappings WHERE database_id = ? AND original_merchant = ? COLLATE NOCASE`,
 			databaseID, originalMerchant,
 		).Scan(&mapping.ID, &mapping.CreatedAt)
 		if err != nil {
@@ -113,7 +171,7 @@ func UpsertMerchantMapping(databaseID, originalMerchant, mappedMerchant string) 
 		}
 	}
 
-	applied, err := applyMerchantMapping(databaseID, mapping)
+	applied, err := reconcileMerchantMappings(databaseID)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -121,39 +179,54 @@ func UpsertMerchantMapping(databaseID, originalMerchant, mappedMerchant string) 
 	return mapping, applied, nil
 }
 
-// applyMerchantMapping rewrites the merchant field on every transaction in
-// the database whose original merchant cleans to mapping.OriginalMerchant,
+// reconcileMerchantMappings re-resolves every transaction in the database
+// against the full current set of merchant mappings (exact and wildcard)
+// and rewrites `merchant` wherever the resolved mapping disagrees with it,
 // so historical (including already-reviewed) transactions stay in sync.
-func applyMerchantMapping(databaseID string, mapping *MerchantMapping) (int, error) {
-	rows, err := db.Query(`SELECT id, original_merchant, merchant FROM transactions WHERE database_id = ?`, databaseID)
+// Re-resolving against the full set (rather than just the mapping that was
+// just written) is what makes precedence between overlapping exact/wildcard
+// mappings correct regardless of which mapping triggered the reconcile.
+func reconcileMerchantMappings(databaseID string) (int, error) {
+	mappings, err := GetMerchantMappings(databaseID)
 	if err != nil {
-		return 0, fmt.Errorf("failed to query transactions for mapping apply: %w", err)
+		return 0, err
 	}
 
-	var matchingIDs []string
+	rows, err := db.Query(`SELECT id, original_merchant, merchant FROM transactions WHERE database_id = ?`, databaseID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to query transactions for mapping reconcile: %w", err)
+	}
+
+	type update struct {
+		id       string
+		merchant string
+	}
+	var updates []update
 	for rows.Next() {
 		var id, originalMerchant, merchant string
 		if err := rows.Scan(&id, &originalMerchant, &merchant); err != nil {
 			rows.Close()
 			return 0, fmt.Errorf("failed to scan transaction: %w", err)
 		}
-		if CleanMerchantName(originalMerchant) == mapping.OriginalMerchant && merchant != mapping.MappedMerchant {
-			matchingIDs = append(matchingIDs, id)
+		cleanKey := CleanMerchantName(originalMerchant)
+		winner := resolveMerchantMapping(cleanKey, mappings)
+		if winner != nil && merchant != winner.MappedMerchant {
+			updates = append(updates, update{id: id, merchant: winner.MappedMerchant})
 		}
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
-		return 0, fmt.Errorf("error iterating transactions for mapping apply: %w", err)
+		return 0, fmt.Errorf("error iterating transactions for mapping reconcile: %w", err)
 	}
 	rows.Close()
 
-	for _, id := range matchingIDs {
-		if _, err := db.Exec(`UPDATE transactions SET merchant = ? WHERE id = ? AND database_id = ?`, mapping.MappedMerchant, id, databaseID); err != nil {
-			return 0, fmt.Errorf("failed to apply merchant mapping to transaction %s: %w", id, err)
+	for _, u := range updates {
+		if _, err := db.Exec(`UPDATE transactions SET merchant = ? WHERE id = ? AND database_id = ?`, u.merchant, u.id, databaseID); err != nil {
+			return 0, fmt.Errorf("failed to apply merchant mapping to transaction %s: %w", u.id, err)
 		}
 	}
 
-	return len(matchingIDs), nil
+	return len(updates), nil
 }
 
 // GetMerchantMappings retrieves all merchant mappings for a database
@@ -218,7 +291,7 @@ func UpdateMerchantMapping(databaseID, id string, m *MerchantMapping) (*Merchant
 		return nil, 0, fmt.Errorf("failed to fetch updated merchant mapping: %w", err)
 	}
 
-	applied, err := applyMerchantMapping(databaseID, mapping)
+	applied, err := reconcileMerchantMappings(databaseID)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -250,14 +323,28 @@ func DeleteMerchantMapping(databaseID, id string) error {
 // are migrated into mappings immediately; keys with multiple distinct
 // spellings are returned as conflicts for the user to resolve manually.
 func ScanMerchantMappingCandidates(databaseID string) ([]MigratedMapping, []MappingConflict, error) {
+	existingMappings, err := GetMerchantMappings(databaseID)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	rows, err := db.Query(`SELECT original_merchant, merchant FROM transactions WHERE database_id = ?`, databaseID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to query transactions for scan: %w", err)
 	}
 	defer rows.Close()
 
-	// cleanKey -> renamed merchant -> count
-	groups := make(map[string]map[string]int)
+	// normalized (lowercased) cleanKey -> group. Grouping is case-insensitive
+	// so the same vendor appearing with different casing across different
+	// banks/statements (e.g. "TARGET" vs "Target") is treated as one key; the
+	// per-transaction "was this edited" check stays case-sensitive, since a
+	// pure case fix (e.g. "TARGET" -> "Target") is itself a legitimate rename
+	// to capture, not something to skip as unedited.
+	type keyGroup struct {
+		displayKey string
+		variants   map[string]int
+	}
+	groups := make(map[string]*keyGroup)
 	for rows.Next() {
 		var originalMerchant, merchant string
 		if err := rows.Scan(&originalMerchant, &merchant); err != nil {
@@ -267,10 +354,16 @@ func ScanMerchantMappingCandidates(databaseID string) ([]MigratedMapping, []Mapp
 		if merchant == key {
 			continue // unedited, nothing to migrate
 		}
-		if groups[key] == nil {
-			groups[key] = make(map[string]int)
+		if covering := resolveMerchantMapping(key, existingMappings); covering != nil && merchant == covering.MappedMerchant {
+			continue // already covered by an existing (e.g. wildcard) mapping, nothing to migrate
 		}
-		groups[key][merchant]++
+		normalizedKey := strings.ToLower(key)
+		group, ok := groups[normalizedKey]
+		if !ok {
+			group = &keyGroup{displayKey: key, variants: make(map[string]int)}
+			groups[normalizedKey] = group
+		}
+		group.variants[merchant]++
 	}
 	if err := rows.Err(); err != nil {
 		return nil, nil, fmt.Errorf("error iterating transactions for scan: %w", err)
@@ -279,15 +372,15 @@ func ScanMerchantMappingCandidates(databaseID string) ([]MigratedMapping, []Mapp
 	migrated := make([]MigratedMapping, 0)
 	conflicts := make([]MappingConflict, 0)
 
-	for key, variants := range groups {
-		if len(variants) == 1 {
-			for merchant := range variants {
-				_, applied, err := UpsertMerchantMapping(databaseID, key, merchant)
+	for _, group := range groups {
+		if len(group.variants) == 1 {
+			for merchant := range group.variants {
+				_, applied, err := UpsertMerchantMapping(databaseID, group.displayKey, merchant)
 				if err != nil {
 					return nil, nil, err
 				}
 				migrated = append(migrated, MigratedMapping{
-					OriginalMerchant: key,
+					OriginalMerchant: group.displayKey,
 					MappedMerchant:   merchant,
 					AppliedCount:     applied,
 				})
@@ -295,14 +388,14 @@ func ScanMerchantMappingCandidates(databaseID string) ([]MigratedMapping, []Mapp
 			continue
 		}
 
-		variantList := make([]VariantCount, 0, len(variants))
-		for merchant, count := range variants {
+		variantList := make([]VariantCount, 0, len(group.variants))
+		for merchant, count := range group.variants {
 			variantList = append(variantList, VariantCount{Merchant: merchant, Count: count})
 		}
 		sort.Slice(variantList, func(i, j int) bool { return variantList[i].Count > variantList[j].Count })
 
 		conflicts = append(conflicts, MappingConflict{
-			OriginalMerchant: key,
+			OriginalMerchant: group.displayKey,
 			Variants:         variantList,
 		})
 	}

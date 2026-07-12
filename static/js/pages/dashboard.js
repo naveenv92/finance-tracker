@@ -16,7 +16,8 @@ import {
   isValidTemplateName,
   isValidColumnName,
   isValidDateFormat,
-  isValidCSVFile
+  isValidCSVFile,
+  isValidMerchantMappingPattern
 } from '../utils/validators.js';
 
 // Check for active database
@@ -588,6 +589,10 @@ window.showMerchantMappingsModal = async function() {
       Notification.error('Please fill in both fields');
       return false;
     }
+    if (!isValidMerchantMappingPattern(data.originalMerchant.trim())) {
+      Notification.error("Use a single trailing * for prefix matching, e.g. 'IN-N-OUT BURGER*'");
+      return false;
+    }
 
     try {
       let result;
@@ -641,7 +646,7 @@ function generateMerchantMappingsModalContent(mappings, editingMapping, conflict
                  data-id="${mp.id}"
                  data-original-merchant="${mp.originalMerchant.replace(/"/g, '&quot;')}"
                  data-mapped-merchant="${mp.mappedMerchant.replace(/"/g, '&quot;')}">
-              <div style="font-weight: var(--font-weight-medium);">${mp.originalMerchant} &rarr; ${mp.mappedMerchant}</div>
+              <div style="font-weight: var(--font-weight-medium);">${mp.originalMerchant} &rarr; ${mp.mappedMerchant}${mp.originalMerchant.endsWith('*') ? ' <span class="text-muted" style="font-weight: var(--font-weight-normal);">(wildcard)</span>' : ''}</div>
             </div>
           `).join('')}
         </div>
@@ -685,7 +690,7 @@ function generateMerchantMappingsModalContent(mappings, editingMapping, conflict
         <div class="form-group">
           <label for="mapping-original-merchant" class="form-label required">Original Merchant Name</label>
           <input type="text" id="mapping-original-merchant" name="originalMerchant" class="form-input" placeholder="e.g., AMAZON MKTPLACE PMTS" value="${m ? m.originalMerchant : ''}" required>
-          <span class="form-help">The auto-cleaned name as it appears before editing (see "Original" on the Review page).</span>
+          <span class="form-help">The auto-cleaned name as it appears before editing (see "Original" on the Review page). End with * to match by prefix, e.g. "IN-N-OUT BURGER*".</span>
         </div>
         <div class="form-group">
           <label for="mapping-mapped-merchant" class="form-label required">Canonical Name</label>

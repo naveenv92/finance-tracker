@@ -109,6 +109,22 @@ export function isValidMerchantName(name) {
 }
 
 /**
+ * Validate a merchant mapping pattern: "*" may only appear as the final
+ * character (trailing-wildcard prefix match), and the literal prefix before
+ * it (or the whole pattern, if there's no "*") must be non-empty.
+ * Mirrors isValidMerchantMappingPattern in merchant_mapping.go.
+ * @param {string} pattern - Mapping's originalMerchant field
+ * @returns {boolean} True if valid
+ */
+export function isValidMerchantMappingPattern(pattern) {
+  if (!pattern || typeof pattern !== 'string') return false;
+  if ((pattern.match(/\*/g) || []).length > 1) return false;
+  const idx = pattern.indexOf('*');
+  if (idx !== -1 && idx !== pattern.length - 1) return false;
+  return pattern.replace(/\*$/, '') !== '';
+}
+
+/**
  * Validate CSV file
  * @param {File} file - File object
  * @returns {boolean} True if valid

@@ -803,6 +803,10 @@ func handleMerchantMappings(w http.ResponseWriter, r *http.Request, dbID string)
 			http.Error(w, "Both originalMerchant and mappedMerchant are required", http.StatusBadRequest)
 			return
 		}
+		if !isValidMerchantMappingPattern(body.OriginalMerchant) {
+			http.Error(w, "Use a single trailing * for prefix matching, e.g. 'IN-N-OUT BURGER*'", http.StatusBadRequest)
+			return
+		}
 
 		mapping, applied, err := UpsertMerchantMapping(dbID, body.OriginalMerchant, body.MappedMerchant)
 		if err != nil {
@@ -835,6 +839,10 @@ func handleMerchantMappingByID(w http.ResponseWriter, r *http.Request, dbID, map
 		}
 		if strings.TrimSpace(mapping.OriginalMerchant) == "" || strings.TrimSpace(mapping.MappedMerchant) == "" {
 			http.Error(w, "Both originalMerchant and mappedMerchant are required", http.StatusBadRequest)
+			return
+		}
+		if !isValidMerchantMappingPattern(mapping.OriginalMerchant) {
+			http.Error(w, "Use a single trailing * for prefix matching, e.g. 'IN-N-OUT BURGER*'", http.StatusBadRequest)
 			return
 		}
 
