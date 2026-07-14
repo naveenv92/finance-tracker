@@ -56,7 +56,7 @@ async function loadData() {
 
 function computeAndRender() {
   people = derivePeople(transactions, templates, ownerName);
-  netBalances = computeNetBalances(transactions, templates, ownerName, settlements);
+  netBalances = computeNetBalances(transactions, settlements);
   renderBalances();
   renderHistory();
 }

@@ -59,12 +59,10 @@ export function derivePeople(reviewedTransactions, templates, ownerName) {
  * Compute netted balances between every pair of people: what's owed from
  * split-cost transactions, minus what's already been recorded as settled.
  * @param {Array} reviewedTransactions - Transactions with reviewed === true
- * @param {Array} templates - All templates for the database
- * @param {string} ownerName - Database-wide owner name (settings fallback)
  * @param {Array} settlements - Recorded settlement ledger entries
  * @returns {Array<{from: string, to: string, amount: number}>} Netted balances, descending by amount
  */
-export function computeNetBalances(reviewedTransactions, templates, ownerName, settlements) {
+export function computeNetBalances(reviewedTransactions, settlements) {
   // Directed running totals keyed by "from|to": how much "from" owes "to"
   const owed = new Map();
   const add = (from, to, amount) => {
@@ -77,7 +75,11 @@ export function computeNetBalances(reviewedTransactions, templates, ownerName, s
     const splits = parseSplits(t.splits);
     if (splits.length < 2) continue; // no non-auto splits, nothing owed
 
-    const owner = getOwnerNameFor(t, templates, ownerName).trim();
+    // The first split is always the payer (auto split) — trust what was
+    // actually saved for this transaction rather than re-deriving it from
+    // template/settings, since the payer name is editable per-transaction
+    // (e.g. manual entries have no matching template at all).
+    const owner = (splits[0].personName || '').trim();
     if (!owner) continue;
 
     for (const s of splits.slice(1)) {
