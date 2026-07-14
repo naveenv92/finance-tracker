@@ -847,9 +847,10 @@ async function showAddTransactionModal() {
     console.error('Failed to load categories:', error);
   }
 
-  const existingSources = [...new Set(
-    allTransactions.map(t => t.source).filter(Boolean)
-  )].sort();
+  const existingSources = [...new Set([
+    ...allTransactions.map(t => t.source).filter(Boolean),
+    'Cash', 'Venmo', 'Zelle',
+  ])].sort();
   if (!existingSources.includes('Manual')) existingSources.unshift('Manual');
 
   const today = new Date().toISOString().slice(0, 10);
