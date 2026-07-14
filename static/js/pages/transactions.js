@@ -873,6 +873,19 @@ async function showAddTransactionModal() {
         <input type="number" id="new-amount" name="amount" class="form-input" step="0.01" placeholder="e.g. 42.50" required>
       </div>
       <div class="form-group">
+        <label class="form-label required">Type</label>
+        <div style="display: flex; flex-direction: column; gap: var(--spacing-xs); margin-top: var(--spacing-xs);">
+          <label style="display: flex; align-items: center; gap: var(--spacing-sm); cursor: pointer;">
+            <input type="radio" name="new-transaction-type" value="expense" checked>
+            Expense (money you spent)
+          </label>
+          <label style="display: flex; align-items: center; gap: var(--spacing-sm); cursor: pointer;">
+            <input type="radio" name="new-transaction-type" value="income">
+            Income (money you received)
+          </label>
+        </div>
+      </div>
+      <div class="form-group">
         <label for="new-category" class="form-label">Category</label>
         <select id="new-category" name="categoryId" class="form-select">
           <option value="">Uncategorized</option>
@@ -907,6 +920,7 @@ async function showAddTransactionModal() {
     const date = document.getElementById('new-date').value;
     const merchant = document.getElementById('new-merchant').value.trim();
     const amountRaw = parseFloat(document.getElementById('new-amount').value);
+    const transactionType = document.querySelector('input[name="new-transaction-type"]:checked').value;
     const categoryId = document.getElementById('new-category').value || null;
     const source = document.getElementById('new-source').value;
     const notes = document.getElementById('new-notes').value.trim();
@@ -930,11 +944,17 @@ async function showAddTransactionModal() {
       return false;
     }
 
+    // Expenses are stored as negative, income as positive — same convention
+    // CSV imports normalize to (see debitSign in dashboard.js) — so the
+    // Settle Debts math (which reads the sign to know who owes whom) works
+    // the same regardless of how the transaction was entered.
+    const signedAmount = transactionType === 'income' ? Math.abs(amountRaw) : -Math.abs(amountRaw);
+
     const transaction = {
       date,
       merchant,
       originalMerchant: merchant,
-      amount: amountRaw,
+      amount: signedAmount,
       categoryId,
       notes,
       source,

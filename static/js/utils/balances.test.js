@@ -166,3 +166,33 @@ test('regression: payer is read from splits[0], not from settings ownerName', ()
   assert.equal(balance.to, 'Sarah');
   assert.equal(balance.amount, 50);
 });
+
+// Regression test for a second, distinct bug: the "Add Transaction" modal
+// used to store manually-entered amounts with whatever sign the user typed
+// (naturally positive for an expense), but computeNetBalances treats a
+// positive amount as income - flipping who owes whom. Manual entries must be
+// signed the same way CSV imports are (expenses negative, income positive)
+// for the direction to come out right.
+test('regression: a manual expense must be stored as negative or the debt direction flips', () => {
+  const paidByNaveen = {
+    amount: -2000, // correctly signed: an expense
+    reviewed: true,
+    source: 'Manual',
+    splits: JSON.stringify([
+      { personName: 'Naveen', amount: 1000 },
+      { personName: 'Alice', amount: 1000 },
+    ]),
+  };
+
+  const [balance] = computeNetBalances([paidByNaveen], []);
+  assert.equal(balance.from, 'Alice');
+  assert.equal(balance.to, 'Naveen');
+  assert.equal(balance.amount, 1000);
+
+  // Sanity-check the bug this guards against: the same transaction stored
+  // with the sign the buggy modal used to produce reverses the balance.
+  const wronglySignedTransaction = { ...paidByNaveen, amount: 2000 };
+  const [buggyBalance] = computeNetBalances([wronglySignedTransaction], []);
+  assert.equal(buggyBalance.from, 'Naveen');
+  assert.equal(buggyBalance.to, 'Alice');
+});
